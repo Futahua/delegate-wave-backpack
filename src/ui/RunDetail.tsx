@@ -79,6 +79,9 @@ export function RunDetail({
 }): ReactNode {
   const { job, briefing, integration, decision } = detail;
   const settled = run.bucket === 'settled';
+  // A decision needs a proposal to be addressed to. Until the host reports one,
+  // the controls are visibly unavailable rather than sending a guessed target.
+  const decidable = !settled && integration?.proposalId !== undefined;
 
   const evCost = sumNums((job?.evidence ?? []).map((e) => e.costUsd));
   const evTokens = sumNums((job?.evidence ?? []).map((e) => e.tokens));
@@ -272,19 +275,24 @@ export function RunDetail({
       <Section title="DECISION">
         <div className="decision">
           <p className="decision-note">
-            The final call is yours. {settled ? 'This run is already settled; the choice is locked.' : 'Submitting it records your decision with delegate-wave \u2014 the page never decides for you, and never assumes a timed-out submission failed.'}
+            The final call is yours.{' '}
+            {settled
+              ? 'This run is already settled; the choice is locked.'
+              : integration?.proposalId === undefined
+                ? 'No integration proposal has been offered for this run yet, so there is nothing to decide on. The controls stay unavailable rather than acting on a guess.'
+                : 'Submitting it records your decision with delegate-wave \u2014 the page never decides for you, and never assumes a timed-out submission failed.'}
           </p>
           <div className="decision-actions">
             <button
               className="btn primary"
-              disabled={settled || decision.state === 'running'}
+              disabled={!decidable || decision.state === 'running'}
               onClick={() => onDecide('approve')}
             >
               {decision.state === 'running' && decision.kind === 'approve' ? 'SENDING\u2026' : 'INTEGRATE'}
             </button>
             <button
               className="btn danger"
-              disabled={settled || decision.state === 'running'}
+              disabled={!decidable || decision.state === 'running'}
               onClick={() => onDecide('decline')}
             >
               {decision.state === 'running' && decision.kind === 'decline' ? 'SENDING\u2026' : 'REJECT'}

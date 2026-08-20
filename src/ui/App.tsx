@@ -9,7 +9,7 @@ import {
   type Bucket,
   type RunModel,
 } from '../model/normalize';
-import { paramsForStart, paramsForTarget, read, write } from '../model/adapter';
+import { paramsForApprove, paramsForDecline, paramsForStart, paramsForTarget, read, write } from '../model/adapter';
 import { RunTable } from './RunList';
 import { RunDetail, type DetailState } from './RunDetail';
 import { StatusTag } from './pieces';
@@ -201,9 +201,17 @@ export default function App(): React.JSX.Element {
   const decide = useCallback(
     async (kind: 'approve' | 'decline') => {
       if (!detail || !selected || detail.decision.state !== 'idle') return;
+      // The decision is addressed to the proposal, never to the run being viewed.
+      // Without one there is nothing that can be approved, and the interface must
+      // not manufacture a target out of the identifier it happens to have.
+      const proposalId = detail.integration?.proposalId;
+      if (!proposalId) return;
       const next: DetailState = { ...detail, decision: { state: 'running', kind } };
       setDetail(next);
-      const res: RelayResult<unknown> = await write(kind, paramsForTarget(selected));
+      const res: RelayResult<unknown> = await write(
+        kind,
+        kind === 'approve' ? paramsForApprove(proposalId) : paramsForDecline(proposalId),
+      );
       const label = kind === 'approve' ? 'Integrate' : 'Reject';
       if (!res.ok) {
         if (res.code === 'TIMEOUT') {

@@ -603,6 +603,17 @@ function normalizeChangeFile(f: unknown): ChangeFile {
 }
 
 export interface IntegrationModel {
+  /**
+   * The proposal this decision would act on.
+   *
+   * Read by exact path rather than by the scope search the display fields use.
+   * A proposal is a distinct entity from the job that produced it -- delegate-wave
+   * approves `/v1/proposals/{proposalId}`, never a job -- so a fuzzy `id` lookup
+   * could return the job's identifier, which would be an authoritative action
+   * taken against the wrong namespace. Undefined means no proposal exists yet,
+   * and the interface must offer no decision at all.
+   */
+  proposalId?: string;
   summary?: string;
   branch?: string;
   commit?: string;
@@ -613,11 +624,34 @@ export interface IntegrationModel {
   raw: unknown;
 }
 
+/**
+ * The proposal identifier, from the two exact places it can legitimately appear.
+ *
+ * Deliberately not `pickStr`. Every other field here is presentation, where
+ * guessing among plausible key names costs at worst a blank cell. This value is
+ * the target of an irreversible action, so it is taken from a known path or not
+ * at all.
+ */
+export function proposalIdFrom(result: unknown): string | undefined {
+  if (!isRecord(result)) return undefined;
+  const direct = result['proposalId'];
+  if (typeof direct === 'string' && direct.trim() !== '') return direct;
+  const proposal = result['proposal'];
+  if (isRecord(proposal)) {
+    for (const key of ['id', 'proposalId'] as const) {
+      const v = proposal[key];
+      if (typeof v === 'string' && v.trim() !== '') return v;
+    }
+  }
+  return undefined;
+}
+
 export function normalizeIntegration(relay: RelayResult<unknown>): IntegrationModel {
   const scopes = collectScopes(relay.result, 3);
   const filesRaw = pickList(scopes, ['files', 'changedFiles', 'changed_files', 'changes', 'diff', 'paths', 'fileList', 'diffFiles']);
   const status = statusFrom(relay.result);
   return {
+    proposalId: proposalIdFrom(relay.result),
     summary: pickStr(scopes, ['summary', 'message', 'description', 'title', 'notes', 'body']),
     branch: pickStr(scopes, ['branch', 'branchName', 'gitBranch', 'targetBranch', 'headBranch', 'ref']),
     commit: pickStr(scopes, ['commit', 'commitSha', 'sha', 'head', 'revision', 'hash']),
