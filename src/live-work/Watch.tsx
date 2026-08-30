@@ -21,6 +21,7 @@ function ActivityRow({ item }: { item: ActivityItem }): React.JSX.Element {
 }
 
 function PhaseRail({ fixture }: { fixture: WatchFixture }): React.JSX.Element {
+  if (!fixture.phases.length) return <></>;
   return <ol className="phase-rail" aria-label={`Current phase: ${fixture.phaseLabel}`}>
     {fixture.phases.map((phase) => <li key={phase.id} className={`phase-${phase.state}`}><span className="phase-dot">{phase.state === 'done' ? '✓' : phase.state === 'failed' ? '×' : ''}</span><span>{phase.label}</span></li>)}
   </ol>;
@@ -29,7 +30,7 @@ function PhaseRail({ fixture }: { fixture: WatchFixture }): React.JSX.Element {
 function ActorPanel({ fixture }: { fixture: WatchFixture }): React.JSX.Element {
   const children = fixture.actors.filter((actor) => actor.role !== 'manager');
   const manager = fixture.actors.find((actor) => actor.role === 'manager');
-  const completedWorkers = children.filter((actor) => actor.role === 'worker' && actor.state === 'completed');
+  const completedWorkers = children.filter((actor) => actor.role === 'worker' && actor.workKind === 'exploration' && actor.state === 'completed');
   return <aside className="actor-panel" aria-label="Workers and phases">
     <div className="panel-eyebrow">People at work</div>
     {manager && <div className="actor actor-manager"><span className={`actor-state ${manager.state}`}/><div><strong>{manager.label}</strong><small>{manager.current ?? fixture.phaseLabel}</small></div></div>}
@@ -45,7 +46,7 @@ function Evidence({ fixture }: { fixture: WatchFixture }): React.JSX.Element {
   </section>;
 }
 
-export function Watch({ fixture }: { fixture: WatchFixture }): React.JSX.Element {
+export function Watch({ fixture, elapsed = fixture.elapsed }: { fixture: WatchFixture; elapsed?: string }): React.JSX.Element {
   const scroller = useRef<HTMLDivElement>(null);
   const [follow, setFollow] = useState<FollowMode>('following-end');
   const [newCount, setNewCount] = useState(0);
@@ -84,7 +85,7 @@ export function Watch({ fixture }: { fixture: WatchFixture }): React.JSX.Element
   return <main className="watch-shell">
     <header className="watch-header">
       <div><span className="watch-overline">Delegate Wave work</span><h1>{fixture.title}</h1></div>
-      <div className="watch-meta"><strong>{fixture.phaseLabel}</strong><span>{fixture.elapsed}</span></div>
+      <div className="watch-meta"><strong>{fixture.phaseLabel}</strong><span>{elapsed}</span></div>
     </header>
     <PhaseRail fixture={fixture}/>
     {fixture.attention && <section className={`attention-banner attention-${fixture.attention.kind}`}><span>{fixture.attention.kind === 'question' ? '?' : fixture.attention.kind === 'failure' ? '×' : '!'}</span><div><strong>{fixture.attention.title}</strong><p>{fixture.attention.detail}</p></div></section>}
@@ -96,7 +97,7 @@ export function Watch({ fixture }: { fixture: WatchFixture }): React.JSX.Element
           {hiddenActivityCount > 0 && <div className="history-window-note">{hiddenActivityCount} older ordinary activities compacted · durable evidence remains below</div>}
           {visibleActivity.map((item, index) => <section className="activity-block" key={item.id}>{index === 0 || visibleActivity[index - 1]?.actorId !== item.actorId ? <h2>{item.actorLabel}</h2> : null}<ActivityRow item={item}/></section>)}
           {fixture.evidence.length > 0 && <Evidence fixture={fixture}/>} 
-          {fixture.changedFiles && <section className="changed-files"><header><strong>{fixture.changedFiles.count} files changed</strong><span>+{fixture.changedFiles.additions ?? 0} −{fixture.changedFiles.deletions ?? 0}</span></header>{fixture.changedFiles.files.map((path) => <code key={path}>{path}</code>)}</section>}
+          {fixture.changedFiles && <section className="changed-files"><header><strong>{fixture.changedFiles.count} files changed</strong>{(fixture.changedFiles.additions !== undefined || fixture.changedFiles.deletions !== undefined) && <span>{fixture.changedFiles.additions !== undefined ? `+${fixture.changedFiles.additions}` : ''}{fixture.changedFiles.additions !== undefined && fixture.changedFiles.deletions !== undefined ? ' ' : ''}{fixture.changedFiles.deletions !== undefined ? `−${fixture.changedFiles.deletions}` : ''}</span>}</header>{fixture.changedFiles.files.map((path) => <code key={path}>{path}</code>)}</section>}
           {fixture.outcome && <section className={`outcome outcome-${fixture.outcome.kind}`}><span>{fixture.outcome.kind === 'completed' ? '✓' : '×'}</span><div><strong>{fixture.outcome.title}</strong><p>{fixture.outcome.detail}</p></div></section>}
           <div className="live-sentinel" aria-label="Live edge"><span/>Live</div>
         </div>

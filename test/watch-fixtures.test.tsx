@@ -31,4 +31,23 @@ describe('fixture-driven Watch experience', () => {
     expect(html).toContain('Worker stopped');
     expect(html).toContain('No candidate was produced');
   });
+
+  it('does not print invented zero line counts when changed-file totals are unknown', () => {
+    const fixture = { ...watchFixtures.success!, changedFiles: { count: 1, files: ['src/live.ts'] } };
+    const html = renderToStaticMarkup(<Watch fixture={fixture} />);
+    expect(html).not.toContain('+0');
+    expect(html).not.toContain('−0');
+  });
+
+  it('does not relabel completed implementation and revision workers as exploration', () => {
+    const fixture = { ...watchFixtures.success!, actors: [
+      { id: 'manager', role: 'manager' as const, label: 'Manager', state: 'working' as const },
+      { id: 'implementation', role: 'worker' as const, label: 'Implementation', state: 'completed' as const, workKind: 'implementation' as const },
+      { id: 'revision', role: 'worker' as const, label: 'Revision', state: 'completed' as const, workKind: 'revision' as const },
+    ] };
+    const html = renderToStaticMarkup(<Watch fixture={fixture} />);
+    expect(html).toContain('Implementation');
+    expect(html).toContain('Revision');
+    expect(html).not.toContain('2 workers · settled');
+  });
 });

@@ -8,7 +8,9 @@ function reply(revision: string, phase: 'implementing' | 'completed' = 'implemen
   return { ok: true, result: { job: { id: 'job_1', objective: 'Watch real work' }, presentation: {
     schema: 1, revision, generated_at: '2026-08-30T00:02:00.000Z',
     phase: { id: phase, label: phase === 'completed' ? 'Completed' : 'Implementing', active: phase !== 'completed' },
-    actors: [], live_activity: [], settled_groups: [], evidence: [],
+    phase_steps: [{ id: 'planning', label: 'Plan', state: 'done' }, { id: 'implementing', label: 'Build', state: phase === 'implementing' ? 'active' : 'done' }],
+    actors: [{ id: 'manager:m1', role: 'manager', label: 'Manager', state: phase === 'completed' ? 'completed' : 'working', started_at: '2026-08-30T00:00:00.000Z', ...(phase === 'completed' ? { finished_at: '2026-08-30T00:02:00.000Z' } : {}) }],
+    live_activity: [{ id: 'stable-row', actor_id: 'manager:m1', actor_role: 'manager', actor_label: 'Manager', kind: 'narration', lifecycle: 'updated', title: 'Reviewing work', occurred_at: '2026-08-30T00:01:00.000Z' }], settled_groups: [], evidence: [],
     ...(phase === 'completed' ? { outcome: { kind: 'completed', summary: 'Done.' } } : {}),
   } } };
 }
@@ -21,6 +23,7 @@ describe('real live Watch polling', () => {
   let host: HTMLDivElement;
   beforeEach(() => {
     vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-08-30T00:02:00.000Z'));
     host = document.createElement('div');
     document.body.append(host);
     Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'visible' });
@@ -78,5 +81,19 @@ describe('real live Watch polling', () => {
     expect(host.textContent).toContain('Work completed');
     expect(reopened).toHaveBeenCalledTimes(1);
     second.unmount();
+  });
+
+  it('advances elapsed time across unchanged revisions without replacing timeline rows', async () => {
+    const readJob = vi.fn().mockResolvedValue(reply('same-revision'));
+    const root = createRoot(host);
+    await act(async () => { root.render(<LiveWatch jobId="job_1" onBack={() => {}} readJob={readJob}/>); });
+    await flush();
+    expect(host.textContent).toContain('2m 0s');
+    const row = host.querySelector('[data-activity-id="stable-row"]');
+    await act(async () => { await vi.advanceTimersByTimeAsync(1_000); });
+    expect(readJob).toHaveBeenCalledTimes(2);
+    expect(host.textContent).toContain('2m 1s');
+    expect(host.querySelector('[data-activity-id="stable-row"]')).toBe(row);
+    root.unmount();
   });
 });

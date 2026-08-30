@@ -7,6 +7,7 @@ function payload(revision = 'r1', phase = 'implementing', activityCount = 1): un
     revision,
     generated_at: '2026-08-30T00:02:00.000Z',
     phase: { id: phase, label: phase === 'completed' ? 'Completed' : 'Implementing', active: phase !== 'completed' },
+    phase_steps: [{ id: 'planning', label: 'Plan', state: 'done' }, { id: 'implementing', label: 'Build', state: phase === 'implementing' ? 'active' : 'done' }],
     actors: [{ id: 'manager:m1', role: 'manager', label: 'Manager', state: 'working', started_at: '2026-08-30T00:00:00.000Z' }],
     live_activity: Array.from({ length: activityCount }, (_, index) => ({ id: `a${index}`, actor_id: 'manager:m1', actor_role: 'manager', kind: 'narration', lifecycle: 'updated', title: `Update ${index}`, occurred_at: '2026-08-30T00:01:00.000Z', authority: 'activity' })),
     settled_groups: [{ id: 'attempt:1', label: 'Worker completed', summary: 'validation passed', state: 'completed' }],
@@ -53,5 +54,47 @@ describe('JobPresentationV1', () => {
     if (!result.ok) throw new Error(result.message);
     expect(result.value.fixture.activity).toHaveLength(1_100);
     expect(new Set(result.value.fixture.activity.map((item) => item.id))).toHaveLength(1_100);
+  });
+
+  it('uses explicit work stages and never invents terminal or attention rail history', () => {
+    const failed = payload('failed', 'failed') as { result: { presentation: Record<string, unknown> } };
+    failed.result.presentation.phase = { id: 'failed', label: 'Stopped', active: false };
+    failed.result.presentation.phase_steps = [{ id: 'planning', label: 'Plan', state: 'done' }, { id: 'implementing', label: 'Build', state: 'failed' }];
+    const failedResult = normalizeJobPresentation(failed);
+    if (!failedResult.ok) throw new Error(failedResult.message);
+    expect(failedResult.value.fixture.phases.map((step) => step.id)).toEqual(['planning', 'implementing']);
+    expect(failedResult.value.fixture.phases).not.toContainEqual(expect.objectContaining({ id: 'completed', state: 'done' }));
+
+    const question = payload('question', 'needs_input') as { result: { presentation: Record<string, unknown> } };
+    question.result.presentation.phase = { id: 'needs_input', label: 'Needs input', active: false };
+    question.result.presentation.phase_steps = [{ id: 'planning', label: 'Plan', state: 'active' }, { id: 'needs_input', label: 'Needs input', state: 'active' }];
+    const questionResult = normalizeJobPresentation(question);
+    if (!questionResult.ok) throw new Error(questionResult.message);
+    expect(questionResult.value.fixture.phases.map((step) => step.id)).toEqual(['planning']);
+    expect(questionResult.value.fixture.phases.some((step) => step.id === 'reviewing')).toBe(false);
+  });
+
+  it('preserves structured actor provenance and groups no implementation or revision worker as exploration', () => {
+    const raw = payload() as { result: { presentation: Record<string, unknown> } };
+    raw.result.presentation.actors = [
+      { id: 'manager:m1', role: 'manager', label: 'Manager', state: 'working', started_at: '2026-08-30T00:00:00.000Z' },
+      { id: 'worker:a1', role: 'worker', label: 'Implementation', state: 'completed', attempt_id: 'a1', child_job_id: 'child_1', work_kind: 'implementation' },
+      { id: 'worker:a2', role: 'worker', label: 'Revision', state: 'completed', attempt_id: 'a2', child_job_id: 'child_2', work_kind: 'revision' },
+    ];
+    const result = normalizeJobPresentation(raw);
+    if (!result.ok) throw new Error(result.message);
+    expect(result.value.fixture.actors[1]).toMatchObject({ attemptId: 'a1', childJobId: 'child_1', workKind: 'implementation' });
+    expect(result.value.fixture.actors[2]).toMatchObject({ attemptId: 'a2', childJobId: 'child_2', workKind: 'revision' });
+    expect(result.value.fixture.actors.filter((item) => item.workKind === 'exploration')).toHaveLength(0);
+  });
+
+  it('keeps unknown changed-line counts absent and aligns manager decision evidence', () => {
+    const raw = payload() as { result: { presentation: Record<string, unknown> } };
+    raw.result.presentation.evidence = [{ id: 'm1', kind: 'manager_decision', state: 'revise', summary: 'Manager requested revision', source: { table: 'manager_turns', id: 'm1' } }];
+    const result = normalizeJobPresentation(raw);
+    if (!result.ok) throw new Error(result.message);
+    expect(result.value.fixture.changedFiles).not.toHaveProperty('additions');
+    expect(result.value.fixture.changedFiles).not.toHaveProperty('deletions');
+    expect(result.value.fixture.evidence[0]?.kind).toBe('manager_decision');
   });
 });

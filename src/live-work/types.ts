@@ -21,7 +21,7 @@ export interface ActivityItem {
 
 export interface EvidenceItem {
   id: string;
-  kind: 'validation' | 'candidate' | 'change' | 'failure' | 'decision';
+  kind: 'validation' | 'candidate' | 'change' | 'failure' | 'manager_decision';
   title: string;
   detail?: string;
   status: 'passed' | 'failed' | 'recorded';
@@ -38,6 +38,9 @@ export interface ActorItem {
   current?: string;
   elapsed?: string;
   parentId?: string;
+  attemptId?: string;
+  childJobId?: string;
+  workKind?: 'exploration' | 'implementation' | 'revision' | 'other';
   startedAt?: string;
   finishedAt?: string;
 }
@@ -53,6 +56,8 @@ export interface WatchFixture {
   id: string;
   title: string;
   elapsed: string;
+  startedAt?: string;
+  finishedAt?: string;
   phase: PhaseId;
   phaseLabel: string;
   phases: Array<{ id: PhaseId; label: string; state: 'future' | 'done' | 'active' | 'failed' }>;

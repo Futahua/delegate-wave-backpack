@@ -21,9 +21,9 @@ const base: WatchFixture = {
   ],
   actors: [
     { id: 'manager', role: 'manager', label: 'Manager', state: 'working', current: 'Reviewing upgrade compatibility', elapsed: '12m 41s' },
-    { id: 'explore-a', role: 'worker', label: 'Ownership investigation', state: 'completed', elapsed: '3m 14s', parentId: 'manager' },
-    { id: 'explore-b', role: 'worker', label: 'Listener investigation', state: 'completed', elapsed: '4m 03s', parentId: 'manager' },
-    { id: 'implementation', role: 'worker', label: 'Implementation', state: 'working', current: 'Running focused tests', elapsed: '2m 11s', parentId: 'manager' },
+    { id: 'explore-a', role: 'worker', label: 'Ownership investigation', state: 'completed', elapsed: '3m 14s', parentId: 'manager', childJobId: 'job_explore_a', workKind: 'exploration' },
+    { id: 'explore-b', role: 'worker', label: 'Listener investigation', state: 'completed', elapsed: '4m 03s', parentId: 'manager', childJobId: 'job_explore_b', workKind: 'exploration' },
+    { id: 'implementation', role: 'worker', label: 'Implementation', state: 'working', current: 'Running focused tests', elapsed: '2m 11s', parentId: 'manager', workKind: 'implementation' },
     { id: 'validator', role: 'validator', label: 'Validation', state: 'completed', current: '58 / 58 passed', parentId: 'implementation' },
   ],
   activity: [
@@ -62,8 +62,8 @@ export const watchFixtures: Record<string, WatchFixture> = {
   parallel: withState('job_parallel', { title: 'Investigate two receiver hypotheses', phase: 'exploring', phaseLabel: 'Exploring' }),
   toolFailure: withState('job_tool_failure', { title: 'Recover from a failed command', attention: { kind: 'failure', title: 'Command failed', detail: 'The failed activity remains visible and is not compacted.' }, activity: [...base.activity, activity('bad-command', 'implementation', 'worker', 'Worker · implementation', 'command', 'failed', 'Focused test command failed', 'Exit 1 · bounded output available in Inspect')] }),
   validationFailure: withState('job_validation_failure', { title: 'Correct a validation regression', phase: 'validating', phaseLabel: 'Validating', evidence: [{ id: 'failed-v', kind: 'validation', title: 'Focused wake suite', detail: '57 / 58 tests passed', status: 'failed', source: 'validation_runs:v_failed', occurredAt: at(18), authority: 'evidence' }] }),
-  revision: withState('job_revision', { title: 'Revise a rejected candidate', phase: 'implementing', phaseLabel: 'Implementing', evidence: [{ id: 'reject', kind: 'decision', title: 'Manager rejected attempt 1', detail: 'Listener exit was requested but not proven.', status: 'recorded', source: 'manager_turns:m_2', occurredAt: at(18), authority: 'evidence' }] }),
-  answered: withState('job_answered', { title: 'Apply the selected archive policy', phase: 'implementing', phaseLabel: 'Implementing', attention: undefined, evidence: [{ id: 'answer', kind: 'decision', title: 'Human answer recorded', detail: 'Include archived runs.', status: 'recorded', source: 'session_messages:q_1', occurredAt: at(18), authority: 'evidence' }] }),
+  revision: withState('job_revision', { title: 'Revise a rejected candidate', phase: 'implementing', phaseLabel: 'Implementing', evidence: [{ id: 'reject', kind: 'manager_decision', title: 'Manager rejected attempt 1', detail: 'Listener exit was requested but not proven.', status: 'recorded', source: 'manager_turns:m_2', occurredAt: at(18), authority: 'evidence' }] }),
+  answered: withState('job_answered', { title: 'Apply the selected archive policy', phase: 'implementing', phaseLabel: 'Implementing', attention: undefined, evidence: [{ id: 'answer', kind: 'change', title: 'Human answer recorded', detail: 'Include archived runs.', status: 'recorded', source: 'session_messages:q_1', occurredAt: at(18), authority: 'evidence' }] }),
   semantics: withState('job_semantics', { title: 'OpenCode semantic vocabulary', activity: [
     activity('sem-read', 'implementation', 'worker', 'Worker · semantics', 'read', 'completed', 'Read App.tsx'),
     activity('sem-glob', 'implementation', 'worker', 'Worker · semantics', 'search', 'completed', 'Found 12 TypeScript files', 'glob src/**/*.ts'),

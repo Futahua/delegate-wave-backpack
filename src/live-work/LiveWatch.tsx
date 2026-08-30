@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { RelayResult } from '../bridge/bridge';
 import { paramsForTarget, read } from '../model/adapter';
-import { normalizeJobPresentation, reconcilePresentation, type NormalizedPresentation } from './presentation';
+import { formatElapsed, normalizeJobPresentation, reconcilePresentation, type NormalizedPresentation } from './presentation';
 import { Watch } from './Watch';
 
 export const ACTIVE_POLL_MS = 900;
 export const HIDDEN_POLL_MS = 5_000;
+export const ELAPSED_TICK_MS = 1_000;
 
 export interface LiveWatchProps {
   jobId: string;
@@ -20,6 +21,7 @@ export function LiveWatch({ jobId, title, onBack, onInspect, readJob }: LiveWatc
   const [failure, setFailure] = useState<string>();
   const [offline, setOffline] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [clock, setClock] = useState(() => Date.now());
   const current = useRef<NormalizedPresentation | undefined>(undefined);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const stopped = useRef(false);
@@ -89,7 +91,14 @@ export function LiveWatch({ jobId, title, onBack, onInspect, readJob }: LiveWatc
     };
   }, [jobId, poll, schedule]);
 
+  useEffect(() => {
+    if (!presentation?.fixture.startedAt || presentation.settled) return;
+    const tick = setInterval(() => setClock(Date.now()), ELAPSED_TICK_MS);
+    return () => clearInterval(tick);
+  }, [presentation?.fixture.startedAt, presentation?.settled]);
+
   if (!presentation) return <main className="watch-shell live-watch-state"><button className="watch-back" onClick={onBack}>← Runs</button><div className="empty-state"><h1>{offline ? 'DELEGATE WAVE OFFLINE' : failure ? 'LIVE VIEW UNAVAILABLE' : 'OPENING LIVE WORK…'}</h1><p>{failure ?? 'Reading the durable job presentation.'}</p>{failure && <button className="btn" onClick={() => void poll()}>RETRY</button>}</div></main>;
 
-  return <div className="live-watch"><div className="watch-toolbar"><button className="watch-back" onClick={onBack}>← Runs</button><div>{onInspect && <button className="watch-back" onClick={onInspect}>Inspect record</button>}<span className={offline ? 'watch-offline' : 'watch-online'}>{offline ? 'Offline · showing last confirmed revision' : presentation.settled ? 'Settled · polling stopped' : refreshing ? 'Checking…' : 'Live'}</span></div></div><Watch fixture={presentation.fixture}/>{failure && <div className="watch-read-error">{failure}</div>}</div>;
+  const elapsed = formatElapsed(presentation.fixture.startedAt, clock, presentation.fixture.finishedAt);
+  return <div className="live-watch"><div className="watch-toolbar"><button className="watch-back" onClick={onBack}>← Runs</button><div>{onInspect && <button className="watch-back" onClick={onInspect}>Inspect record</button>}<span className={offline ? 'watch-offline' : 'watch-online'}>{offline ? 'Offline · showing last confirmed revision' : presentation.settled ? 'Settled · polling stopped' : refreshing ? 'Checking…' : 'Live'}</span></div></div><Watch fixture={presentation.fixture} elapsed={elapsed}/>{failure && <div className="watch-read-error">{failure}</div>}</div>;
 }

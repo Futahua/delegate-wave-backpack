@@ -2,20 +2,14 @@ import type { ActivityItem, ActorItem, EvidenceItem, PhaseId, WatchFixture, Work
 
 type JsonRecord = Record<string, unknown>;
 
-const PHASES: Array<{ id: PhaseId; label: string }> = [
-  { id: 'queued', label: 'Queued' },
-  { id: 'planning', label: 'Planning' },
-  { id: 'exploring', label: 'Exploring' },
-  { id: 'implementing', label: 'Implementing' },
-  { id: 'validating', label: 'Validating' },
-  { id: 'reviewing', label: 'Reviewing' },
-  { id: 'needs_input', label: 'Needs input' },
-  { id: 'ready', label: 'Ready' },
-  { id: 'completed', label: 'Completed' },
-  { id: 'failed', label: 'Stopped' },
-];
-
-const PHASE_IDS: Set<string> = new Set(PHASES.map((phase) => phase.id));
+const WORK_PHASE_IDS = new Set(['planning', 'exploring', 'implementing', 'validating', 'reviewing']);
+const PHASE_IDS = new Set(['queued', ...WORK_PHASE_IDS, 'needs_input', 'ready', 'completed', 'failed']);
+const PHASE_LABELS: Record<PhaseId, string> = {
+  queued: 'Queued', planning: 'Planning', exploring: 'Exploring', implementing: 'Implementing',
+  validating: 'Validating', reviewing: 'Reviewing', needs_input: 'Needs input', ready: 'Ready',
+  completed: 'Completed', failed: 'Stopped',
+};
+const PHASE_STEP_STATES = new Set(['future', 'done', 'active', 'failed']);
 const ACTIVITY_KINDS = new Set(['narration', 'read', 'search', 'edit', 'command', 'agent', 'question', 'todo', 'web', 'other']);
 const ACTOR_ROLES = new Set(['manager', 'worker', 'validator']);
 const ACTOR_STATES = new Set(['waiting', 'working', 'completed', 'failed']);
@@ -42,6 +36,7 @@ export interface JobPresentationV1 {
   revision: string;
   generated_at: string;
   phase: { id: PhaseId; label: string; active: boolean };
+  phase_steps: Array<{ id: PhaseId; label: string; state: 'future' | 'done' | 'active' | 'failed' }>;
   actors: JsonRecord[];
   live_activity: JsonRecord[];
   settled_groups: JsonRecord[];
@@ -68,11 +63,11 @@ function findPresentation(payload: unknown): { presentation?: JsonRecord; job?: 
   return { presentation: record(result.presentation), job: record(result.job) };
 }
 
-function elapsed(generatedAt: string, actors: ActorItem[]): string {
-  const generated = Date.parse(generatedAt);
-  const starts = actors.map((actor) => Date.parse(actor.startedAt ?? '')).filter(Number.isFinite);
-  if (!Number.isFinite(generated) || !starts.length) return 'Elapsed unavailable';
-  const seconds = Math.max(0, Math.floor((generated - Math.min(...starts)) / 1000));
+export function formatElapsed(startedAt: string | undefined, nowMs: number, finishedAt?: string): string {
+  const start = Date.parse(startedAt ?? '');
+  const finish = finishedAt ? Date.parse(finishedAt) : nowMs;
+  if (!Number.isFinite(start) || !Number.isFinite(finish)) return 'Elapsed unavailable';
+  const seconds = Math.max(0, Math.floor((finish - start) / 1000));
   const hours = Math.floor(seconds / 3600);
   const minutes = Math.floor((seconds % 3600) / 60);
   return hours ? `${hours}h ${minutes}m` : `${minutes}m ${seconds % 60}s`;
@@ -89,6 +84,9 @@ function actor(item: unknown, index: number): ActorItem {
     startedAt: text(value.started_at),
     finishedAt: text(value.finished_at),
     parentId: text(value.parent_id),
+    attemptId: text(value.attempt_id),
+    childJobId: text(value.child_job_id),
+    workKind: oneOf(value.work_kind, new Set(['exploration', 'implementation', 'revision', 'other']), 'other'),
   };
 }
 
@@ -116,7 +114,7 @@ function evidence(item: unknown, index: number): EvidenceItem {
   const state = text(value.state);
   return {
     id: text(value.id) ?? `evidence:${index}`,
-    kind: oneOf(value.kind, new Set(['validation', 'candidate', 'change', 'failure', 'decision']), 'change'),
+    kind: oneOf(value.kind, new Set(['validation', 'candidate', 'change', 'failure', 'manager_decision']), 'change'),
     title: text(value.summary) ?? 'Evidence recorded',
     detail: text(value.detail),
     status: state === 'passed' ? 'passed' : state === 'failed' ? 'failed' : 'recorded',
@@ -150,8 +148,20 @@ export function normalizeJobPresentation(payload: unknown, fallbackTitle = 'Dele
   }
   const actors = list(presentation.actors).map(actor);
   const phase = phaseId as PhaseId;
-  const currentIndex = PHASES.findIndex((item) => item.id === phase);
   const terminal = phase === 'completed' || phase === 'failed';
+  const phaseSteps = list(presentation.phase_steps).map(record).flatMap((step) => {
+    const id = text(step?.id);
+    if (!id || !WORK_PHASE_IDS.has(id)) return [];
+    return [{
+      id: id as PhaseId,
+      label: text(step?.label) ?? PHASE_LABELS[id as PhaseId],
+      state: oneOf(step?.state, PHASE_STEP_STATES, 'future' as const),
+    }];
+  });
+  const starts = actors.map((item) => item.startedAt).filter((value): value is string => Boolean(value));
+  const finishes = actors.map((item) => item.finishedAt).filter((value): value is string => Boolean(value));
+  const startedAt = starts.sort((left, right) => Date.parse(left) - Date.parse(right))[0];
+  const finishedAt = terminal ? finishes.sort((left, right) => Date.parse(right) - Date.parse(left))[0] : undefined;
   const attentionRaw = record(presentation.attention);
   const outcomeRaw = record(presentation.outcome);
   const changedRaw = record(presentation.changed_files);
@@ -159,13 +169,12 @@ export function normalizeJobPresentation(payload: unknown, fallbackTitle = 'Dele
   const fixture: WatchFixture = {
     id: text(job?.id) ?? fallbackTitle,
     title: text(job?.objective) ?? text(job?.title) ?? fallbackTitle,
-    elapsed: elapsed(generatedAt, actors),
+    elapsed: formatElapsed(startedAt, Date.parse(generatedAt), finishedAt),
+    startedAt,
+    finishedAt,
     phase,
-    phaseLabel: text(phaseRaw.label) ?? PHASES[currentIndex]!.label,
-    phases: PHASES.map((item, index) => ({
-      ...item,
-      state: terminal && item.id === phase ? (phase === 'failed' ? 'failed' : 'done') : index < currentIndex ? 'done' : index === currentIndex ? 'active' : 'future',
-    })),
+    phaseLabel: text(phaseRaw.label) ?? PHASE_LABELS[phase],
+    phases: phaseSteps,
     actors,
     activity: list(presentation.live_activity).map(activity),
     settledGroups: list(presentation.settled_groups).map(settledGroup),
@@ -180,7 +189,12 @@ export function normalizeJobPresentation(payload: unknown, fallbackTitle = 'Dele
       title: outcomeRaw.kind === 'completed' ? 'Work completed' : 'Work stopped',
       detail: text(outcomeRaw.summary) ?? 'Delegate Wave settled the job.',
     } : undefined,
-    changedFiles: changedRaw ? { count: typeof changedRaw.count === 'number' ? changedRaw.count : changedFiles.length, files: changedFiles } : undefined,
+    changedFiles: changedRaw ? {
+      count: typeof changedRaw.count === 'number' ? changedRaw.count : changedFiles.length,
+      ...(typeof changedRaw.additions === 'number' ? { additions: changedRaw.additions } : {}),
+      ...(typeof changedRaw.deletions === 'number' ? { deletions: changedRaw.deletions } : {}),
+      files: changedFiles,
+    } : undefined,
   };
   return { ok: true, value: { revision, settled: terminal || Boolean(outcomeRaw), fixture } };
 }
