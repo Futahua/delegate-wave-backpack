@@ -15,6 +15,7 @@ import { RunDetail, type DetailState } from './RunDetail';
 import { StatusTag } from './pieces';
 import { fmtClock, fmtMoney } from './format';
 import { FixtureLab } from '../live-work/FixtureLab';
+import { LiveWatch } from '../live-work/LiveWatch';
 
 type Boot = 'loading' | 'ready' | 'offline' | 'error';
 type Nav = 'overview' | 'active' | 'attention' | 'ready' | 'settled' | 'run';
@@ -80,6 +81,7 @@ export default function App(): React.JSX.Element {
   const [runs, setRuns] = useState<RunModel[]>([]);
   const [nav, setNav] = useState<Nav>('overview');
   const [selected, setSelected] = useState<string>();
+  const [runView, setRunView] = useState<'watch' | 'record'>('watch');
   const [detail, setDetail] = useState<DetailState>();
   const [objective, setObjective] = useState('');
   const [startState, setStartState] = useState<StartState>('idle');
@@ -135,9 +137,15 @@ export default function App(): React.JSX.Element {
     void refreshAll();
   }, [refreshAll]);
 
-  const loadDetail = useCallback(async (id: string) => {
+  const loadDetail = useCallback((id: string) => {
     setSelected(id);
+    setRunView('watch');
     setNav('run');
+    setDetail(undefined);
+  }, []);
+
+  const loadRecord = useCallback(async (id: string) => {
+    setRunView('record');
     setDetail(undefined);
     const [j, b, i] = await Promise.all([
       read('job', paramsForTarget(id)),
@@ -147,13 +155,8 @@ export default function App(): React.JSX.Element {
     const anyTimeout = j.code === 'TIMEOUT' || b.code === 'TIMEOUT' || i.code === 'TIMEOUT';
     if (j.ok || b.ok || i.ok) setConn('ok');
     setDetail({
-      job: normalizeJob(j),
-      briefing: normalizeBrief(b),
-      integration: normalizeIntegration(i),
-      jobOk: j.ok,
-      briefingOk: b.ok,
-      integrationOk: i.ok,
-      anyTimeout,
+      job: normalizeJob(j), briefing: normalizeBrief(b), integration: normalizeIntegration(i),
+      jobOk: j.ok, briefingOk: b.ok, integrationOk: i.ok, anyTimeout,
       decision: { state: 'idle' },
     });
   }, []);
@@ -275,10 +278,12 @@ export default function App(): React.JSX.Element {
         }
       />
     );
-  } else if (nav === 'run' && selectedRun && detail) {
-    content = (
-      <RunDetail run={selectedRun} detail={detail} onBack={() => goNav('overview')} onDecide={decide} />
-    );
+  } else if (nav === 'run' && selectedRun && runView === 'record' && detail) {
+    content = <RunDetail run={selectedRun} detail={detail} onBack={() => setRunView('watch')} onDecide={decide} />;
+  } else if (nav === 'run' && selectedRun && runView === 'record') {
+    content = <div className="empty">LOADING DURABLE RECORD…</div>;
+  } else if (nav === 'run' && selectedRun) {
+    content = <LiveWatch jobId={selectedRun.id} title={selectedRun.objective ?? selectedRun.title} onBack={() => goNav('overview')} onInspect={() => void loadRecord(selectedRun.id)} />;
   } else if (nav === 'overview') {
     content = (
       <OverviewPage

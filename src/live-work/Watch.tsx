@@ -28,10 +28,11 @@ function PhaseRail({ fixture }: { fixture: WatchFixture }): React.JSX.Element {
 
 function ActorPanel({ fixture }: { fixture: WatchFixture }): React.JSX.Element {
   const children = fixture.actors.filter((actor) => actor.role !== 'manager');
+  const manager = fixture.actors.find((actor) => actor.role === 'manager');
   const completedWorkers = children.filter((actor) => actor.role === 'worker' && actor.state === 'completed');
   return <aside className="actor-panel" aria-label="Workers and phases">
     <div className="panel-eyebrow">People at work</div>
-    <div className="actor actor-manager"><span className="actor-state active"/><div><strong>Manager</strong><small>{fixture.actors[0]?.current ?? fixture.phaseLabel}</small></div></div>
+    {manager && <div className="actor actor-manager"><span className={`actor-state ${manager.state}`}/><div><strong>{manager.label}</strong><small>{manager.current ?? fixture.phaseLabel}</small></div></div>}
     {completedWorkers.length > 1 && <details className="actor-group"><summary><span>Exploration</span><small>{completedWorkers.length} workers · settled</small></summary>{completedWorkers.map((actor) => <div className="actor actor-child" key={actor.id}><span className="actor-state done">✓</span><div><strong>{actor.label}</strong><small>{actor.elapsed}</small></div></div>)}</details>}
     {children.filter((actor) => !completedWorkers.includes(actor)).map((actor) => <div className="actor actor-child" key={actor.id}><span className={`actor-state ${actor.state}`}>{actor.state === 'completed' ? '✓' : actor.state === 'failed' ? '×' : ''}</span><div><strong>{actor.label}</strong><small>{actor.current ?? actor.elapsed ?? actor.state}</small></div></div>)}
   </aside>;
@@ -91,7 +92,7 @@ export function Watch({ fixture }: { fixture: WatchFixture }): React.JSX.Element
       <ActorPanel fixture={fixture}/>
       <div className="timeline-wrap">
         <div className="timeline" ref={scroller} onScroll={(event) => { const node = event.currentTarget; const next = nextFollowMode(follow, distanceFromEnd(node.scrollHeight, node.scrollTop, node.clientHeight)); if (next !== follow) { setFollow(next); if (next === 'following-end') setNewCount(0); } }}>
-          {fixture.settledGroups.map((group) => <section className="settled-group" key={group.id}><button onClick={() => toggleGroup(group.id)} aria-expanded={expanded.has(group.id)}><span>{expanded.has(group.id) ? '▾' : '▸'} {group.summary}</span><small>{group.label}</small></button>{expanded.has(group.id) && <div className="settled-items">{group.items.map((item) => <ActivityRow key={item.id} item={item}/>)}</div>}</section>)}
+          {fixture.settledGroups.map((group) => <section className="settled-group" key={group.id}>{group.items.length ? <><button onClick={() => toggleGroup(group.id)} aria-expanded={expanded.has(group.id)}><span>{expanded.has(group.id) ? '▾' : '▸'} {group.summary}</span><small>{group.label}</small></button>{expanded.has(group.id) && <div className="settled-items">{group.items.map((item) => <ActivityRow key={item.id} item={item}/>)}</div>}</> : <div className="settled-summary"><span>{group.summary}</span><small>{group.label}</small></div>}</section>)}
           {hiddenActivityCount > 0 && <div className="history-window-note">{hiddenActivityCount} older ordinary activities compacted · durable evidence remains below</div>}
           {visibleActivity.map((item, index) => <section className="activity-block" key={item.id}>{index === 0 || visibleActivity[index - 1]?.actorId !== item.actorId ? <h2>{item.actorLabel}</h2> : null}<ActivityRow item={item}/></section>)}
           {fixture.evidence.length > 0 && <Evidence fixture={fixture}/>} 

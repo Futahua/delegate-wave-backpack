@@ -38,6 +38,8 @@ export interface ActorItem {
   current?: string;
   elapsed?: string;
   parentId?: string;
+  startedAt?: string;
+  finishedAt?: string;
 }
 
 export interface WorkGroup {
