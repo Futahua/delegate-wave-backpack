@@ -399,6 +399,7 @@ function bucketCounts(runs: RunModel[]): Record<Bucket, number> {
 export interface OverviewModel {
   runs: RunModel[];
   counts: Record<Bucket, number>;
+  typedWork: boolean;
   cycle?: number;
   budgetSpent?: number;
   budgetAvailable?: number;
@@ -407,16 +408,63 @@ export interface OverviewModel {
   raw: unknown;
 }
 
+type OverviewPresence = 'active' | 'attention' | 'ready' | 'settled';
+
+interface OverviewWorkV1 {
+  id: string;
+  project_id: string;
+  project_name: string;
+  objective: string;
+  job_status: string;
+  presence: OverviewPresence;
+  activity_state?: string;
+  manager_status?: string;
+  session_state?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+function overviewWorkV1(value: unknown): OverviewWorkV1 | undefined {
+  if (!isRecord(value)) return undefined;
+  const presence = value['presence'];
+  if (!['active', 'attention', 'ready', 'settled'].includes(String(presence))) return undefined;
+  const required = ['id', 'project_id', 'project_name', 'objective', 'job_status', 'created_at', 'updated_at'] as const;
+  if (required.some((key) => typeof value[key] !== 'string' || value[key].length === 0)) return undefined;
+  return value as unknown as OverviewWorkV1;
+}
+
+function normalizeOverviewWork(value: unknown): RunModel | undefined {
+  const work = overviewWorkV1(value);
+  if (!work) return undefined;
+  return {
+    id: work.id,
+    title: work.objective,
+    objective: work.objective,
+    status: work.job_status,
+    bucket: work.presence,
+    startedAt: work.created_at,
+    finishedAt: work.presence === 'settled' ? work.updated_at : undefined,
+    reason: work.activity_state ?? work.manager_status ?? work.session_state,
+    raw: value,
+  };
+}
+
 export function normalizeOverview(relay: RelayResult<unknown>): OverviewModel {
   const scopes = collectScopes(relay.result, 3);
-  const items = pickList(scopes, ['runs', 'jobs', 'items', 'entries', 'work', 'queue', 'projects', 'objectives', 'activities', 'history', 'rows']);
-  const runs = (items ?? []).map(normalizeRun);
-  const counts = runs.length > 0 ? bucketCounts(runs) : reportedCounts(scopes);
+  const typedItems = isRecord(relay.result) && Array.isArray(relay.result['work'])
+    ? relay.result['work'] : undefined;
+  const typedRuns = typedItems?.map(normalizeOverviewWork).filter((item): item is RunModel => Boolean(item));
+  const items = typedItems === undefined
+    ? pickList(scopes, ['runs', 'jobs', 'items', 'entries', 'queue', 'objectives', 'activities', 'history', 'rows', 'projects'])
+    : undefined;
+  const runs = typedRuns ?? (items ?? []).map(normalizeRun);
+  const counts = typedItems !== undefined ? bucketCounts(runs) : runs.length > 0 ? bucketCounts(runs) : reportedCounts(scopes);
   const budget = pickRecord(scopes, ['budget', 'cost', 'accounting', 'spend']);
   const budgetScopes = budget ? [budget] : [];
   return {
     runs,
     counts,
+    typedWork: typedItems !== undefined,
     cycle:
       pickNum(scopes, ['cycle', 'cycles', 'round', 'rounds', 'iteration', 'iterations', 'attempt', 'attempts']) ??
       pickNum(scopes, ['cycleCount', 'sequentialCycle']),

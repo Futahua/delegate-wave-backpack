@@ -19,6 +19,8 @@ import { LiveWatch } from '../live-work/LiveWatch';
 
 type Boot = 'loading' | 'ready' | 'offline' | 'error';
 type Nav = 'overview' | 'active' | 'attention' | 'ready' | 'settled' | 'run';
+const OVERVIEW_VISIBLE_POLL_MS = 1_200;
+const OVERVIEW_HIDDEN_POLL_MS = 5_000;
 type StartState = 'idle' | 'proposing' | 'authorizing' | 'uncertain' | 'done' | 'failed';
 
 interface LogEntry {
@@ -92,6 +94,8 @@ export default function App(): React.JSX.Element {
   const logId = useRef(0);
   const unnamedCounter = useRef(0);
   const startedRef = useRef(false);
+  const refreshInFlight = useRef(false);
+  const hasConfirmedOverview = useRef(false);
 
   const addLog = useCallback((kind: Operation, label: string, state: LogEntry['state'], message?: string) => {
     logId.current += 1;
@@ -102,33 +106,50 @@ export default function App(): React.JSX.Element {
   }, []);
 
   const refreshAll = useCallback(async () => {
+    if (refreshInFlight.current) return;
+    refreshInFlight.current = true;
     setRefreshing(true);
-    setBoot((prev) => (prev === 'offline' || prev === 'error' ? 'loading' : prev));
-    const [o, a] = await Promise.all([read('overview'), read('attention')]);
-    if (o.ok || a.ok) setConn('ok');
-    if (o.ok) {
-      const m = normalizeOverview(o);
-      setOverview(m);
-      setRuns((prev) => mergeRuns(prev, m.runs, unnamedCounter));
-    } else if (o.code === 'TIMEOUT') {
-      if (a.ok) {
-        setBoot('ready');
+    try {
+      setBoot((prev) => (prev === 'offline' || prev === 'error' ? 'loading' : prev));
+      const [o, a] = await Promise.all([read('overview'), read('attention')]);
+      if (o.ok || a.ok) setConn('ok');
+      const overviewModel = o.ok ? normalizeOverview(o) : undefined;
+      const attentionItems = a.ok ? normalizeAttention(a).items : undefined;
+      if (overviewModel) {
+        hasConfirmedOverview.current = true;
+        setOverview(overviewModel);
+        // The typed work index is a complete bounded snapshot. Legacy payloads remain additive for
+        // compatibility, but typed rows must move buckets or disappear exactly as the server says.
+        setRuns((prev) => overviewModel.typedWork
+          ? overviewModel.runs
+          : mergeRuns(prev, overviewModel.runs, unnamedCounter));
+      } else if (o.code === 'TIMEOUT') {
+        if (a.ok) {
+          setBoot('ready');
+        } else {
+          setConn('none');
+          // A timeout withdraws freshness, not the last durable projection. Keep it visible and
+          // clearly mark the host offline; only a first-load timeout has no snapshot to show.
+          setBoot(hasConfirmedOverview.current ? 'ready' : 'offline');
+        }
       } else {
-        setConn('none');
-        setBoot('offline');
+        setFailMessage(o.message ?? 'overview failed');
+        setConn('error');
+        setBoot('error');
       }
-    } else {
-      setFailMessage(o.message ?? 'overview failed');
-      setConn('error');
-      setBoot('error');
+      if (attentionItems) {
+        setAttention(attentionItems);
+        // On an old server attention is still one of the only run inventories. A typed server keeps
+        // it solely for the attention page so it cannot repopulate stale rows outside overview.work.
+        if (!overviewModel?.typedWork) {
+          setRuns((prev) => mergeRuns(prev, attentionItems, unnamedCounter));
+        }
+      }
+      if (o.ok || a.ok) setBoot('ready');
+    } finally {
+      setRefreshing(false);
+      refreshInFlight.current = false;
     }
-    if (a.ok) {
-      const am = normalizeAttention(a);
-      setAttention(am.items);
-      setRuns((prev) => mergeRuns(prev, am.items, unnamedCounter));
-    }
-    if (o.ok || a.ok) setBoot('ready');
-    setRefreshing(false);
   }, []);
 
   useEffect(() => {
@@ -136,6 +157,33 @@ export default function App(): React.JSX.Element {
     startedRef.current = true;
     void refreshAll();
   }, [refreshAll]);
+
+  useEffect(() => {
+    if (nav === 'run') return;
+    let stopped = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const schedule = (): void => {
+      if (stopped) return;
+      if (timer) clearTimeout(timer);
+      const delay = document.visibilityState === 'hidden' ? OVERVIEW_HIDDEN_POLL_MS : OVERVIEW_VISIBLE_POLL_MS;
+      timer = setTimeout(async () => {
+        await refreshAll();
+        schedule();
+      }, delay);
+    };
+    const visibility = (): void => {
+      if (timer) clearTimeout(timer);
+      if (document.visibilityState === 'visible') void refreshAll().finally(schedule);
+      else schedule();
+    };
+    document.addEventListener('visibilitychange', visibility);
+    schedule();
+    return () => {
+      stopped = true;
+      if (timer) clearTimeout(timer);
+      document.removeEventListener('visibilitychange', visibility);
+    };
+  }, [nav, refreshAll]);
 
   const loadDetail = useCallback((id: string) => {
     setSelected(id);
@@ -239,11 +287,12 @@ export default function App(): React.JSX.Element {
     setSelected(undefined);
     setDetail(undefined);
     setNav(n === 'run' ? 'overview' : n);
-  }, []);
+    if (n !== 'run') void refreshAll();
+  }, [refreshAll]);
 
   const counts = overview ? overview.counts : countRuns(runs);
   const channels: Channel[] = [
-    { key: 'active', title: 'ACTIVE', count: counts.active, hint: 'Work in motion \u2014 staffed by workers.' },
+    { key: 'active', title: 'ACTIVE', count: counts.active, hint: 'Work currently in motion.' },
     { key: 'attention', title: 'ATTENTION', count: counts.attention, hint: 'Blocked, failed, or needs input.' },
     { key: 'ready', title: 'READY', count: counts.ready, hint: 'Awaiting your go or final decision.' },
     { key: 'settled', title: 'SETTLED', count: counts.settled, hint: 'Integrated or declined history.' },
