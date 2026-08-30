@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { read, paramsForSessionList, paramsForSessionTimeline } from '../model/adapter';
 import { SessionTimeline } from '../timeline/SessionTimeline';
-import { mergeStreamPage, sessionPageFromRelay, timelineFromRelay, type ProcessSpan, type SessionSummary, type SessionTimeline as Timeline } from '../timeline/model';
+import { mergeStreamPage, mergeTimelineRefresh, sessionPageFromRelay, timelineFromRelay, type ProcessSpan, type SessionSummary, type SessionTimeline as Timeline } from '../timeline/model';
 
 export const VISIBLE_LIST_POLL = 1_200;
 export const HIDDEN_LIST_POLL = 5_000;
@@ -80,7 +80,12 @@ export function App(): React.JSX.Element {
         const next = timelineFromRelay(reply.result);
         if (!next) throw new Error('Delegate Wave returned an unreadable timeline.');
         if (stopped) return;
-        if (!acceptedRevision || next.revision !== acceptedRevision) { acceptedRevision = next.revision; setTimeline(next); }
+        if (!acceptedRevision || next.revision !== acceptedRevision) {
+          acceptedRevision = next.revision;
+          const refreshed=timelineRef.current?.session.id===selected?mergeTimelineRefresh(timelineRef.current,next):next;
+          timelineRef.current=refreshed;
+          setTimeline(refreshed);
+        }
         setTimelineFreshness('fresh');
       } catch (error) {
         if (!stopped) { setTimelineFreshness('stale'); setMessage(error instanceof Error ? error.message : 'Timeline read failed.'); }
