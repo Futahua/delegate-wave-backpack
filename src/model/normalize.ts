@@ -1,7 +1,7 @@
 /**
  * View-model layer for the Delegate Wave dashboard.
  *
- * The relay contract is frozen at nine operations and none of their payload
+ * The relay contract is frozen at eleven operations and none of their payload
  * shapes are documented here. Every normalizer below therefore accepts unknown
  * JSON from `call()`, digs through a set of plausible wrapper keys, preserves
  * whatever useful fields it can find, and labels every absent fact honestly

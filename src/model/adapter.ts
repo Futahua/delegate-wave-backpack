@@ -5,7 +5,7 @@
  * only here. The page otherwise deals in opaque identifiers and free-form
  * intent; this file is the single place those become concrete `params`, chosen
  * under the plausible names the operator might recognise. Nothing here widens
- * the bridge contract — the nine operations still travel through `call()`
+ * the bridge contract — the eleven operations still travel through `call()`
  * untouched — it only decides what `call()` sends.
  *
  * Read operations use a shorter timeout so the page can degrade to a
@@ -33,6 +33,16 @@ export function paramsForStart(intent: string): Record<string, unknown> {
  */
 export function paramsForTarget(id: string): Record<string, unknown> {
   return { id, runId: id, jobId: id };
+}
+
+export function paramsForSessionList(cursor?: string, limit = 40): Record<string, unknown> {
+  return { ...(cursor ? { cursor } : {}), limit };
+}
+
+export function paramsForSessionTimeline(sessionId: string, options: {
+  streamSpanId?: string; before?: string; limit?: number;
+} = {}): Record<string, unknown> {
+  return { sessionId, ...options };
 }
 
 /**

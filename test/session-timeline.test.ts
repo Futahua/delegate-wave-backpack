@@ -1,36 +1,9 @@
-import { describe, expect, it } from 'vitest';
-import { allocateLanes, compactable, sessionsFromOverview, timelineFromJob, type ProcessSpan } from '../src/timeline/model';
-
-const span = (id: string, start: string, finish: string): ProcessSpan => ({
-  id, actor: 'worker', label: id, state: 'completed', startedAt: start, finishedAt: finish,
-  stream: [{ id: `${id}:read`, kind: 'read', lifecycle: 'completed', title: 'Read file', occurredAt: finish, authority: 'activity' }],
-});
-
-describe('session-first timeline model', () => {
-  it('uses the durable Hermes relationship and session identity from overview', () => {
-    expect(sessionsFromOverview({ sessions: [{ id: 's1', root_job_id: 'j1', intent: 'Fix it', state: 'live', origin_hermes_session_id: 'h1', started_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:01:00Z' }] })).toEqual([
-      expect.objectContaining({ id: 's1', rootJobId: 'j1', originHermesSessionId: 'h1', state: 'live' }),
-    ]);
-  });
-  it('places only genuinely overlapping intervals in different lanes', () => {
-    const placed = allocateLanes([
-      span('a', '2026-01-01T00:00:00Z', '2026-01-01T00:05:00Z'),
-      span('b', '2026-01-01T00:02:00Z', '2026-01-01T00:07:00Z'),
-      span('c', '2026-01-01T00:07:00Z', '2026-01-01T00:08:00Z'),
-    ], 8);
-    expect(placed.find((item) => item.id === 'a')?.lane).not.toBe(placed.find((item) => item.id === 'b')?.lane);
-    expect(placed.find((item) => item.id === 'c')?.lane).toBe(placed.find((item) => item.id === 'a')?.lane);
-  });
-  it('never compacts evidence or failures', () => {
-    const ordinary = span('a', '2026-01-01T00:00:00Z', '2026-01-01T00:01:00Z');
-    expect(compactable(ordinary)).toBe(true);
-    expect(compactable({ ...ordinary, stream: [{ ...ordinary.stream[0]!, authority: 'evidence' }] })).toBe(false);
-    expect(compactable({ ...ordinary, stream: [{ ...ordinary.stream[0]!, lifecycle: 'failed' }] })).toBe(false);
-  });
-  it('normalizes a 1000-event durable timeline without dropping stable ids', () => {
-    const events = Array.from({ length: 1_000 }, (_, index) => ({ id: `e${index}`, kind: 'command', lifecycle: 'completed', title: `Command ${index}`, occurred_at: '2026-01-01T00:00:00Z', authority: 'activity' }));
-    const value = timelineFromJob({ session_timeline: { revision: 'r1', session: { id: 's1', root_job_id: 'j1', intent: 'Long work', state: 'settled', started_at: '2026-01-01T00:00:00Z', settled_at: '2026-01-01T01:00:00Z', updated_at: '2026-01-01T01:00:00Z' }, spans: [{ id: 'w1', actor: 'worker', label: 'Worker', state: 'completed', started_at: '2026-01-01T00:00:00Z', finished_at: '2026-01-01T01:00:00Z', stream: events }] } });
-    expect(value?.spans[0]?.stream).toHaveLength(1_000);
-    expect(new Set(value!.spans[0]!.stream.map((item) => item.id)).size).toBe(1_000);
-  });
+import { describe,expect,it } from 'vitest';
+import { buildGeometry,bundleMundaneProcesses,isMundaneShort,mergeStreamPage,sessionPageFromRelay,timelineFromRelay,type ProcessSpan } from '../src/timeline/model';
+const span=(id:string,start:string,finish:string,overrides:Partial<ProcessSpan>={}):ProcessSpan=>({id,actor:'worker',label:id,state:'completed',startedAt:start,finishedAt:finish,stream:[{id:`${id}:read`,kind:'read',lifecycle:'completed',title:'Read file',occurredAt:finish,authority:'activity'}],streamBounds:{complete:true,hasEarlier:false},...overrides});
+describe('session-first read model',()=>{
+  it('normalizes independently paginated session pages',()=>{const page=sessionPageFromRelay({sessions:[{id:'s1',intent:'Fix',mode:'AUTO',state:'live',origin_hermes_session_id:'h1',started_at:'2026-01-01T00:00:00Z',updated_at:'2026-01-01T00:01:00Z'}],has_more:true,next_cursor:'next'});expect(page).toEqual(expect.objectContaining({hasMore:true,nextCursor:'next'}));expect(page?.sessions[0]).toEqual(expect.objectContaining({id:'s1',originHermesSessionId:'h1'}))});
+  it('preserves real idle gaps and uses cluster-local lane widths',()=>{const geometry=buildGeometry([span('a','2026-01-01T00:00:00Z','2026-01-01T00:05:00Z'),span('b','2026-01-01T00:02:00Z','2026-01-01T00:07:00Z'),span('c','2026-01-01T01:00:00Z','2026-01-01T01:01:00Z')],8);expect(geometry).toHaveLength(2);expect(geometry[0]!.laneCount).toBe(2);expect(geometry[1]!.laneCount).toBe(1);expect(geometry[1]!.gapBefore).toBe(53*8)});
+  it('bundles only adjacent short mundane workers and never manager narration or long work',()=>{const a=span('a','2026-01-01T00:00:00Z','2026-01-01T00:00:20Z'),b=span('b','2026-01-01T00:00:25Z','2026-01-01T00:00:45Z'),manager=span('m','2026-01-01T00:01:00Z','2026-01-01T00:01:20Z',{actor:'manager',stream:[{id:'reason',kind:'narration',lifecycle:'completed',title:'Real reason',occurredAt:'2026-01-01T00:01:20Z',authority:'activity'}]}),long=span('long','2026-01-01T00:02:00Z','2026-01-01T00:22:00Z');expect(isMundaneShort(manager)).toBe(false);expect(isMundaneShort(long)).toBe(false);const result=bundleMundaneProcesses([a,b,manager,long]);expect(result[0]).toEqual(expect.objectContaining({bundle:true}));expect(result).toHaveLength(3)});
+  it('merges earlier stream pages without losing stable ids',()=>{const base=timelineFromRelay({revision:'r1',session:{id:'s1',intent:'x',mode:'AUTO',state:'settled',started_at:'2026-01-01T00:00:00Z',updated_at:'2026-01-01T00:01:00Z'},spans:[{id:'worker:a',actor:'worker',label:'A',state:'completed',started_at:'2026-01-01T00:00:00Z',finished_at:'2026-01-01T00:01:00Z',stream:[{id:'e2',kind:'read',lifecycle:'completed',title:'2',occurred_at:'2026-01-01T00:01:00Z'}],stream_bounds:{complete:false,has_earlier:true,cursor:'1'}}]})!;const page=timelineFromRelay({revision:'r2',stream_page_for:'worker:a',session:{id:'s1',intent:'x',mode:'AUTO',state:'settled',started_at:'2026-01-01T00:00:00Z',updated_at:'2026-01-01T00:01:00Z'},spans:[{id:'worker:a',actor:'worker',label:'A',state:'completed',started_at:'2026-01-01T00:00:00Z',finished_at:'2026-01-01T00:01:00Z',stream:[{id:'e1',kind:'read',lifecycle:'completed',title:'1',occurred_at:'2026-01-01T00:00:00Z'}],stream_bounds:{complete:true,has_earlier:false}}]})!;expect(mergeStreamPage(base,page).spans[0]!.stream.map((item)=>item.id)).toEqual(['e1','e2'])});
 });

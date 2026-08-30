@@ -1,49 +1,115 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { read, paramsForTarget } from '../model/adapter';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { read, paramsForSessionList, paramsForSessionTimeline } from '../model/adapter';
 import { SessionTimeline } from '../timeline/SessionTimeline';
-import { sessionsFromOverview, timelineFromJob, type SessionSummary, type SessionTimeline as Timeline } from '../timeline/model';
+import { mergeStreamPage, sessionPageFromRelay, timelineFromRelay, type ProcessSpan, type SessionSummary, type SessionTimeline as Timeline } from '../timeline/model';
+
+export const VISIBLE_LIST_POLL = 1_200;
+export const HIDDEN_LIST_POLL = 5_000;
+export const VISIBLE_TIMELINE_POLL = 900;
+export const HIDDEN_TIMELINE_POLL = 5_000;
 
 export function App(): React.JSX.Element {
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [selected, setSelected] = useState<string>();
   const [timeline, setTimeline] = useState<Timeline>();
+  const [indexFreshness, setIndexFreshness] = useState<'fresh'|'stale'|'loading'>('loading');
+  const [timelineFreshness, setTimelineFreshness] = useState<'fresh'|'stale'|'loading'>('loading');
   const [message, setMessage] = useState('Connecting to Delegate Wave…');
-  const refresh = useCallback(async () => {
-    const overview = await read('overview');
-    if (!overview.ok) { setMessage(overview.message ?? 'Delegate Wave is unavailable.'); return; }
-    const next = sessionsFromOverview(overview.result);
-    setSessions(next);
-    setSelected((current) => current && next.some((session) => session.id === current) ? current : next[0]?.id);
-    setMessage(next.length ? '' : 'No autonomous sessions have been recorded yet. Delegate through Hermes to begin.');
+  const timelineRef = useRef<Timeline|undefined>(undefined);
+  timelineRef.current = timeline;
+
+  const loadSessionIndex = useCallback(async () => {
+    const collected: SessionSummary[] = [];
+    let cursor: string | undefined;
+    do {
+      const reply = await read('session.list', paramsForSessionList(cursor, 40));
+      if (!reply.ok) throw new Error(reply.message ?? 'Session history is unavailable.');
+      const page = sessionPageFromRelay(reply.result);
+      if (!page) throw new Error('Delegate Wave returned an unreadable session index.');
+      collected.push(...page.sessions);
+      cursor = page.hasMore ? page.nextCursor : undefined;
+      if (page.hasMore && !cursor) throw new Error('Session history pagination stopped without a cursor.');
+    } while (cursor);
+    return collected;
   }, []);
-  useEffect(() => { void refresh(); const timer = setInterval(() => void refresh(), 1_200); return () => clearInterval(timer); }, [refresh]);
+
   useEffect(() => {
-    const session = sessions.find((item) => item.id === selected);
-    if (!session?.rootJobId) { setTimeline(undefined); return; }
     let stopped = false;
-    const poll = async () => {
-      const reply = await read('job', paramsForTarget(session.rootJobId!));
-      if (!stopped && reply.ok) { const next = timelineFromJob(reply.result); if (next) setTimeline(next); }
+    let running = false;
+    let timer: ReturnType<typeof setTimeout>|undefined;
+    const schedule = () => {
+      if (!stopped) timer = setTimeout(() => void run(), document.visibilityState === 'hidden' ? HIDDEN_LIST_POLL : VISIBLE_LIST_POLL);
     };
-    void poll();
-    const timer = setInterval(() => void poll(), session.state === 'settled' ? 5_000 : 900);
-    return () => { stopped = true; clearInterval(timer); };
-  }, [selected, sessions]);
+    const run = async () => {
+      if (stopped || running) return;
+      running = true;
+      try {
+        const next = await loadSessionIndex();
+        if (stopped) return;
+        setSessions(next);
+        setSelected((current) => current && next.some((session) => session.id === current) ? current : next[0]?.id);
+        setIndexFreshness('fresh');
+        setMessage(next.length ? '' : 'No autonomous sessions have been recorded yet. Delegate through Hermes to begin.');
+      } catch (error) {
+        if (!stopped) { setIndexFreshness('stale'); setMessage(error instanceof Error ? error.message : 'Session history is unavailable.'); }
+      } finally { running = false; schedule(); }
+    };
+    void run();
+    const visibility = () => { if (timer) clearTimeout(timer); if (!running) timer = setTimeout(() => void run(), 0); };
+    document.addEventListener('visibilitychange', visibility);
+    return () => { stopped = true; if (timer) clearTimeout(timer); document.removeEventListener('visibilitychange', visibility); };
+  }, [loadSessionIndex]);
+
+  const selectedSession = sessions.find((session) => session.id === selected);
+  useEffect(() => {
+    if (!selected) return;
+    let stopped = false;
+    let running = false;
+    let timer: ReturnType<typeof setTimeout>|undefined;
+    let acceptedRevision: string|undefined;
+    setTimelineFreshness((current) => current === 'fresh' ? 'fresh' : 'loading');
+    const schedule = () => {
+      if (!stopped) timer = setTimeout(() => void run(), document.visibilityState === 'hidden' ? HIDDEN_TIMELINE_POLL : VISIBLE_TIMELINE_POLL);
+    };
+    const run = async () => {
+      if (stopped || running) return;
+      running = true;
+      try {
+        const reply = await read('session.timeline', paramsForSessionTimeline(selected, { limit: 120 }));
+        if (!reply.ok) throw new Error(reply.message ?? 'Timeline read failed.');
+        const next = timelineFromRelay(reply.result);
+        if (!next) throw new Error('Delegate Wave returned an unreadable timeline.');
+        if (stopped) return;
+        if (!acceptedRevision || next.revision !== acceptedRevision) { acceptedRevision = next.revision; setTimeline(next); }
+        setTimelineFreshness('fresh');
+      } catch (error) {
+        if (!stopped) { setTimelineFreshness('stale'); setMessage(error instanceof Error ? error.message : 'Timeline read failed.'); }
+      } finally { running = false; schedule(); }
+    };
+    void run();
+    const visibility = () => { if (timer) clearTimeout(timer); if (!running) timer = setTimeout(() => void run(), 0); };
+    document.addEventListener('visibilitychange', visibility);
+    return () => { stopped = true; if (timer) clearTimeout(timer); document.removeEventListener('visibilitychange', visibility); };
+  }, [selected, selectedSession?.state]);
+
+  const loadEarlier = useCallback(async (span: ProcessSpan) => {
+    if (!selected || !span.streamBounds.cursor) return;
+    const reply = await read('session.timeline', paramsForSessionTimeline(selected, { streamSpanId: span.id, before: span.streamBounds.cursor, limit: 120 }));
+    if (!reply.ok) { setTimelineFreshness('stale'); setMessage(reply.message ?? 'Earlier activity could not be loaded.'); return; }
+    const page = timelineFromRelay(reply.result);
+    const current = timelineRef.current;
+    if (page && current) { const merged = mergeStreamPage(current, page); timelineRef.current = merged; setTimeline(merged); }
+  }, [selected]);
+
   const groups = useMemo(() => {
     const map = new Map<string, SessionSummary[]>();
-    for (const session of sessions) {
-      const key = `${session.originHermesSessionId ?? 'Unlinked Hermes conversation'} · ${new Date(session.startedAt).toLocaleDateString()}`;
-      map.set(key, [...(map.get(key) ?? []), session]);
-    }
+    for (const item of sessions) { const key = item.originHermesSessionId ?? 'Unlinked Hermes sessions'; map.set(key, [...(map.get(key) ?? []), item]); }
+    for (const items of map.values()) items.sort((a, b) => Date.parse(b.startedAt) - Date.parse(a.startedAt));
     return [...map];
   }, [sessions]);
   const selectedTimeline = timeline?.session.id === selected ? timeline : undefined;
-  return <div className="session-app">
-    <aside className="session-sidebar"><header><span className="wave-mark">↗</span><div><b>DELEGATE WAVE</b><small>Work history</small></div></header>
-      <div className="session-groups">{groups.map(([group, items]) => <section key={group}><h2>{group}</h2>{items.map((session) => <button className={selected === session.id ? 'selected' : ''} key={session.id} onClick={() => { setSelected(session.id); setTimeline(undefined); }}><i className={`session-dot ${session.state}`}/><span>{session.intent}</span><time>{new Date(session.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</time></button>)}</section>)}</div>
-      <footer>OBSERVATION ONLY · PAPERS RELAY</footer></aside>
-    <main className="session-main">{selectedTimeline ? <SessionTimeline timeline={selectedTimeline}/> : <div className="timeline-empty"><div className="pulse"/><h1>{selected ? 'Reconstructing durable history…' : 'Your delegated work appears here'}</h1><p>{message || 'Reading the exact session timeline.'}</p></div>}</main>
-  </div>;
+  const freshness = selectedTimeline ? timelineFreshness : indexFreshness;
+  return <div className="session-app"><aside className="session-sidebar"><header><span className="wave-mark">↗</span><div><b>DELEGATE WAVE</b><small>Work history</small></div></header><div className="session-groups">{groups.map(([group,items]) => <section key={group}><h2>{group}</h2>{items.map((item) => <button className={selected === item.id ? 'selected' : ''} key={item.id} onClick={() => { setSelected(item.id); setTimeline(undefined); }}><i className={`session-dot ${item.state}`}/><span>{item.intent}</span><time>{new Date(item.startedAt).toLocaleDateString()}</time></button>)}</section>)}</div><footer>OBSERVATION ONLY · {freshness === 'fresh' ? 'LIVE' : freshness === 'stale' ? 'STALE · LAST CONFIRMED' : 'CONNECTING'}</footer></aside><main className="session-main">{selectedTimeline ? <><div className={`freshness freshness-${freshness}`}>{freshness === 'stale' ? 'Offline · showing last confirmed revision' : ''}</div><SessionTimeline timeline={selectedTimeline} onLoadEarlier={loadEarlier}/></> : <div className="timeline-empty"><div className="pulse"/><h1>{selected ? 'Reconstructing durable history…' : 'Your delegated work appears here'}</h1><p>{message || 'Reading the exact session timeline.'}</p></div>}</main></div>;
 }
 
 export default App;

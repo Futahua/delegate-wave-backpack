@@ -15,7 +15,7 @@ request on its behalf.
 
     page  --postMessage-->  Papers preload  --IPC-->  Papers main  --loopback-->  delegate-wave
 
-`src/bridge/bridge.ts` restates that contract. The nine operations it names are
+`src/bridge/bridge.ts` restates that contract. The eleven operations it names are
 the complete surface: `overview`, `briefing`, `attention`, `job`, `propose`,
 `authorize`, `integration`, `approve`, `decline`. The page never holds a token,
 a URL or an HTTP method, and its identity is attached by Papers from the page

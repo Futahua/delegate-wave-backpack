@@ -9,7 +9,7 @@
  * token, and its identity is attached by the Papers preload from the page
  * origin — never sent from this file.
  *
- * The nine operations below are the complete surface. If the interface needs a
+ * The eleven operations below are the complete surface. If the interface needs a
  * truth these cannot express, that is a specific missing truth to raise as a
  * contract change, not a reason to widen anything here.
  */
@@ -23,7 +23,9 @@ export type Operation =
   | 'authorize'
   | 'integration'
   | 'approve'
-  | 'decline';
+  | 'decline'
+  | 'session.list'
+  | 'session.timeline';
 
 export interface RelayResult<T = unknown> {
   ok: boolean;
