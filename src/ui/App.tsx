@@ -1,4 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ComponentType } from 'react';
+import { Pane, SplitPane, type DividerProps } from 'react-split-pane';
+import 'react-split-pane/styles.css';
 import { read, paramsForSessionList, paramsForSessionTimeline } from '../model/adapter';
 import { SessionTimeline } from '../timeline/SessionTimeline';
 import { mergeStreamPage, mergeTimelineRefresh, sessionPageFromRelay, timelineFromRelay, type ProcessSpan, type SessionSummary, type SessionTimeline as Timeline } from '../timeline/model';
@@ -9,8 +11,12 @@ export const VISIBLE_TIMELINE_POLL = 900;
 export const HIDDEN_TIMELINE_POLL = 5_000;
 
 export interface SessionConversationGroup { id:string; label:string; sessions:SessionSummary[] }
-const neutralConversationLabel=(newest:SessionSummary)=>`Hermes conversation · ${new Date(newest.startedAt).toLocaleDateString(undefined,{month:'short',day:'numeric'})}`;
+const neutralConversationLabel=(newest:SessionSummary)=>`Hermes · ${new Date(newest.startedAt).toLocaleTimeString(undefined,{hour:'numeric',minute:'2-digit'})}`;
 export function buildSessionGroups(sessions:SessionSummary[]):SessionConversationGroup[]{const conversations=new Map<string,SessionSummary[]>();for(const item of sessions){const identity=item.originHermesSessionId??`unlinked:${item.id}`;conversations.set(identity,[...(conversations.get(identity)??[]),item])}return[...conversations].map(([id,items])=>{const sorted=[...items].sort((a,b)=>Date.parse(b.startedAt)-Date.parse(a.startedAt));return{id,label:neutralConversationLabel(sorted[0]!),sessions:sorted}}).sort((a,b)=>Date.parse(b.sessions[0]!.startedAt)-Date.parse(a.sessions[0]!.startedAt))}
+
+const DEFAULT_SIDEBAR_WIDTH=264,MIN_SIDEBAR_WIDTH=200,MAX_SIDEBAR_WIDTH=420;
+export const normalizeSidebarWidth=(saved:string|null|undefined)=>{if(saved===null||saved===undefined)return DEFAULT_SIDEBAR_WIDTH;const value=Number(saved);return Number.isFinite(value)?Math.min(MAX_SIDEBAR_WIDTH,Math.max(MIN_SIDEBAR_WIDTH,value)):DEFAULT_SIDEBAR_WIDTH};
+const savedSidebarWidth=()=>normalizeSidebarWidth(globalThis.localStorage?.getItem('delegate-wave.sidebar-width'));
 
 export function App(): React.JSX.Element {
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
@@ -19,6 +25,8 @@ export function App(): React.JSX.Element {
   const [indexFreshness, setIndexFreshness] = useState<'fresh'|'stale'|'loading'>('loading');
   const [timelineFreshness, setTimelineFreshness] = useState<'fresh'|'stale'|'loading'>('loading');
   const [message, setMessage] = useState('Connecting to Delegate Wave…');
+  const [sidebarWidth,setSidebarWidth]=useState(savedSidebarWidth);
+  const [collapsedGroups,setCollapsedGroups]=useState<Set<string>>(()=>new Set());
   const timelineRef = useRef<Timeline|undefined>(undefined);
   timelineRef.current = timeline;
 
@@ -113,7 +121,8 @@ export function App(): React.JSX.Element {
   const groups = useMemo(() => buildSessionGroups(sessions), [sessions]);
   const selectedTimeline = timeline?.session.id === selected ? timeline : undefined;
   const freshness = selectedTimeline ? timelineFreshness : indexFreshness;
-  return <div className="session-app"><aside className="session-sidebar"><header><span className="wave-mark">↗</span><div><b>Delegate Wave</b><small>Agent sessions</small></div></header><div className="session-groups">{groups.map((group)=><section className="conversation-group" key={group.id}><h2 title={`Hermes ${group.id}`}>{group.label}</h2>{group.sessions.map((item) => <button title={`Hermes ${item.originHermesSessionId??'unlinked'} · Session ${item.id}`} className={selected === item.id ? 'selected' : ''} key={item.id} onClick={() => { setSelected(item.id); setTimeline(undefined); }}><i className={`session-dot ${item.state}`}/><span><b>{item.intent}</b><small>{item.state} · {new Date(item.startedAt).toLocaleString(undefined,{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})}</small></span></button>)}</section>)}</div><footer>{freshness === 'fresh' ? 'Watching durable work' : freshness === 'stale' ? 'Offline · last confirmed' : 'Connecting…'}</footer></aside><main className="session-main">{selectedTimeline ? <><div className={`freshness freshness-${freshness}`}>{freshness === 'stale' ? 'Offline · showing last confirmed revision' : ''}</div><SessionTimeline timeline={selectedTimeline} onLoadEarlier={loadEarlier}/></> : <div className="timeline-empty"><div className="pulse"/><h1>{selected ? 'Reconstructing durable history…' : 'Your delegated work appears here'}</h1><p>{message || 'Reading the exact session timeline.'}</p></div>}</main></div>;
+  const Divider=useCallback<ComponentType<DividerProps>>(({className,style,onPointerDown,onKeyDown,currentSize,minSize,maxSize,disabled})=><div className={`${className??''} sidebar-divider`} style={style} role="separator" aria-label="Resize sessions sidebar" aria-orientation="vertical" aria-valuenow={currentSize} aria-valuemin={minSize} aria-valuemax={maxSize} tabIndex={disabled?-1:0} onPointerDown={disabled?undefined:onPointerDown} onKeyDown={disabled?undefined:onKeyDown} onDoubleClick={()=>{setSidebarWidth(DEFAULT_SIDEBAR_WIDTH);localStorage.setItem('delegate-wave.sidebar-width',String(DEFAULT_SIDEBAR_WIDTH))}}/>,[]);
+  return <div className="session-app"><SplitPane direction="horizontal" className="session-split" divider={Divider} dividerSize={7} step={10} onResize={(sizes)=>setSidebarWidth(sizes[0]??DEFAULT_SIDEBAR_WIDTH)} onResizeEnd={(sizes)=>{const width=Math.round(sizes[0]??DEFAULT_SIDEBAR_WIDTH);setSidebarWidth(width);localStorage.setItem('delegate-wave.sidebar-width',String(width))}}><Pane size={sidebarWidth} minSize={MIN_SIDEBAR_WIDTH} maxSize={MAX_SIDEBAR_WIDTH}><aside className="session-sidebar"><header className="session-nav-header"><b>Sessions</b></header><div className="session-groups">{groups.map((group)=>{const collapsed=collapsedGroups.has(group.id);return <section className="conversation-group" key={group.id}><button className="conversation-toggle" title={`Hermes ${group.id}`} aria-expanded={!collapsed} onClick={()=>setCollapsedGroups((current)=>{const next=new Set(current);next.has(group.id)?next.delete(group.id):next.add(group.id);return next})}><span>{collapsed?'›':'⌄'}</span><b>{group.label}</b><small>{group.sessions.length} {group.sessions.length===1?'wave':'waves'}</small></button>{!collapsed&&group.sessions.map((item) => <button title={`Hermes ${item.originHermesSessionId??'unlinked'} · Session ${item.id}`} className={`session-link${selected === item.id ? ' selected' : ''}`} key={item.id} onClick={() => { setSelected(item.id); setTimeline(undefined); }}><i className={`session-dot ${item.state}`}/><span><b>{item.intent}</b><small>{item.state} · {new Date(item.startedAt).toLocaleString(undefined,{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})}</small></span></button>)}</section>})}</div><footer>{freshness === 'fresh' ? 'Watching durable work' : freshness === 'stale' ? 'Offline · last confirmed' : 'Connecting…'}</footer></aside></Pane><Pane minSize={360}><main className="session-main">{selectedTimeline ? <><div className={`freshness freshness-${freshness}`}>{freshness === 'stale' ? 'Offline · showing last confirmed revision' : ''}</div><SessionTimeline timeline={selectedTimeline} onLoadEarlier={loadEarlier}/></> : <div className="timeline-empty"><div className="pulse"/><h1>{selected ? 'Reconstructing durable history…' : 'Your delegated work appears here'}</h1><p>{message || 'Reading the exact session timeline.'}</p></div>}</main></Pane></SplitPane></div>;
 }
 
 export default App;

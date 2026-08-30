@@ -8,6 +8,7 @@ vi.mock('../src/model/adapter', async (load) => {
   return { ...actual, read: relay.read };
 });
 vi.mock('../src/timeline/SessionTimeline', () => ({ SessionTimeline: ({timeline}:{timeline:{revision:string}}) => <div data-testid="timeline">{timeline.revision}</div> }));
+vi.mock('react-split-pane',()=>({SplitPane:({children}:{children:React.ReactNode})=><>{children}</>,Pane:({children}:{children:React.ReactNode})=><>{children}</>}));
 import { App, VISIBLE_LIST_POLL, VISIBLE_TIMELINE_POLL } from '../src/ui/App';
 
 const summary = { id:'s1', intent:'Durable autonomous work', mode:'AUTO', state:'live', started_at:'2026-01-01T00:00:00Z', updated_at:'2026-01-01T00:00:01Z' };
@@ -17,7 +18,7 @@ const tick = async (ms=0) => { await act(async()=>{ await vi.advanceTimersByTime
 
 describe('App polling mechanics', () => {
   let host:HTMLDivElement, root:Root;
-  beforeEach(()=>{ vi.useFakeTimers(); relay.read.mockReset(); host=document.createElement('div'); document.body.append(host); root=createRoot(host); });
+  beforeEach(()=>{ vi.useFakeTimers(); relay.read.mockReset(); globalThis.ResizeObserver=class{observe(){}unobserve(){}disconnect(){}}; host=document.createElement('div'); document.body.append(host); root=createRoot(host); });
   afterEach(()=>{ act(()=>root.unmount()); host.remove(); vi.useRealTimers(); });
 
   it('never overlaps an index poll while the previous request is unresolved', async () => {
@@ -40,7 +41,7 @@ describe('App polling mechanics', () => {
       timelineReads+=1;
       return timelineReads===1?timelineReply('confirmed-r1'):{ok:false,message:'relay offline'};
     });
-    await act(async()=>root.render(<App/>)); await tick();
+    await act(async()=>root.render(<App/>)); await tick(); await tick();
     expect(host.querySelector('[data-testid="timeline"]')?.textContent).toBe('confirmed-r1');
     await tick(VISIBLE_TIMELINE_POLL);
     expect(host.querySelector('[data-testid="timeline"]')?.textContent).toBe('confirmed-r1');

@@ -42,9 +42,9 @@ describe('the built Backpack artifact', () => {
     expect(src!.startsWith('/')).toBe(false);
   });
 
-  it('keeps the inline request preview out of a nested scroll viewport', () => {
-    expect(sourceCss).toMatch(/\.request-preview p\s*\{[^}]*-webkit-line-clamp:\s*4;/s);
-    expect(sourceCss).not.toMatch(/\.request-(?:disclosure|preview)[^{]*\{[^}]*overflow:\s*auto/s);
+  it('keeps the session shell free of native range and masthead-scroll scaffolding', () => {
+    expect(sourceCss).toMatch(/\.sidebar-divider:after/);
+    expect(sourceCss).toMatch(/::-webkit-scrollbar-button[^}]*display:\s*none/s);
   });
 
   it('executes and mounts something into #root', async () => {
@@ -52,6 +52,7 @@ describe('the built Backpack artifact', () => {
     expect(assets.length).toBeGreaterThan(0);
 
     document.body.innerHTML = '<div id="root"></div>';
+    globalThis.ResizeObserver = class { observe() {} unobserve() {} disconnect() {} };
     // Importing the real built bundle: if the entry throws, fails to parse, or
     // mounts nothing, this is where it shows.
     await import(/* @vite-ignore */ path.join(publicDir, 'assets', assets[0]!));
