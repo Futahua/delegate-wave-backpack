@@ -313,12 +313,14 @@ function Stream({
 }
 function Card({
   span,
+  lane,
   open,
   toggle,
   loading,
   load,
 }: {
   span: ProcessSpan;
+  lane: number;
   open: boolean;
   toggle: () => void;
   loading: boolean;
@@ -330,6 +332,7 @@ function Card({
     <article
       className={`process-card actor-${span.actor} state-${span.state}${open ? " expanded" : ""}`}
       data-testid={`process:${span.id}`}
+      style={{ gridColumn: lane + 1 }}
     >
       <button className="process-header" onClick={toggle} aria-expanded={open}>
         <span className="role-chip">{span.actor}</span>
@@ -503,7 +506,7 @@ export function SessionTimeline({
         >
           {groups.map((g) => (
             <section
-              className={`feed-group${g.processes.length > 1 ? " parallel-group" : ""}`}
+              className={`feed-group${g.laneCount > 1 ? " parallel-group" : ""}`}
               key={g.id}
               data-testid={g.id}
             >
@@ -512,18 +515,17 @@ export function SessionTimeline({
                   hour: "2-digit",
                   minute: "2-digit",
                 })}
-                {g.processes.length > 1 && <span>parallel work</span>}
+                {g.laneCount > 1 && <span>parallel work</span>}
               </div>
               <div
                 className="feed-processes"
-                style={
-                  { "--lane-count": g.processes.length } as React.CSSProperties
-                }
+                style={{ "--lane-count": g.laneCount } as React.CSSProperties}
               >
-                {g.processes.map((s) => (
+                {g.processes.map(({ process: s, lane }) => (
                   <Card
                     key={s.id}
                     span={s}
+                    lane={lane}
                     open={open.has(s.id)}
                     toggle={() =>
                       setOpen((x) => {
