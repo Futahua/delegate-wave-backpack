@@ -11,7 +11,7 @@ export const VISIBLE_TIMELINE_POLL = 900;
 export const HIDDEN_TIMELINE_POLL = 5_000;
 
 export interface SessionConversationGroup { id:string; label:string; sessions:SessionSummary[] }
-const neutralConversationLabel=(newest:SessionSummary)=>`Hermes · ${new Date(newest.startedAt).toLocaleTimeString(undefined,{hour:'numeric',minute:'2-digit'})}`;
+const neutralConversationLabel=(newest:SessionSummary)=>newest.originHermesSessionTitle?.trim()||`Hermes · ${new Date(newest.startedAt).toLocaleTimeString(undefined,{hour:'numeric',minute:'2-digit'})}`;
 export function buildSessionGroups(sessions:SessionSummary[]):SessionConversationGroup[]{const conversations=new Map<string,SessionSummary[]>();for(const item of sessions){const identity=item.originHermesSessionId??`unlinked:${item.id}`;conversations.set(identity,[...(conversations.get(identity)??[]),item])}return[...conversations].map(([id,items])=>{const sorted=[...items].sort((a,b)=>Date.parse(b.startedAt)-Date.parse(a.startedAt));return{id,label:neutralConversationLabel(sorted[0]!),sessions:sorted}}).sort((a,b)=>Date.parse(b.sessions[0]!.startedAt)-Date.parse(a.sessions[0]!.startedAt))}
 
 const DEFAULT_SIDEBAR_WIDTH=264,MIN_SIDEBAR_WIDTH=200,MAX_SIDEBAR_WIDTH=420;

@@ -1,30 +1,574 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { buildGeometry, bundleMundaneProcesses, type ConcurrencyCluster, type ProcessBundle, type ProcessSpan, type SessionTimeline as Timeline, type StreamItem, type TimelineProcess } from './model';
-
-export interface TimelineBootstrapDiagnostic { suppliedClusters:number; viewportWidth:number; viewportHeight:number; listLoaded:boolean; renderedItems:number }
-const GLYPH:Record<StreamItem['kind'],string>={narration:'',read:'◇',search:'⌕',edit:'◆',command:'›',agent:'↗',question:'?',todo:'○',web:'◎',other:'·'};
-const basename=(value:string)=>{const clean=value.replace(/<[^>]+>/g,' ').replace(/["'`]/g,'').trim(),path=clean.match(/[A-Za-z]:[\\/][^\s]+|(?:\.\.?[\\/])?[^\s]+[\\/][^\s]+/)?.[0];return path?path.split(/[\\/]/).filter(Boolean).at(-1)??clean:clean};
-const withoutVerb=(value:string)=>value.replace(/^(Read|Search|Edit|Write|Bash|Command|Run|Todo(?:write)?)\s*[:·-]?\s*/i,'').trim();
-export function semanticToolLabel(item:StreamItem):string {const target=withoutVerb(item.title);switch(item.kind){case'read':return`Read ${basename(target)}`;case'search':return`Search ${target.replace(/^(?:Glob|Grep|Search)\s*/i,'')}`;case'edit':return`Edit ${basename(target)}`;case'todo':return'Update tasks';case'web':return`Fetch ${target}`;case'agent':return`Delegate ${target}`;case'command':return target.replace(/^Running\s+/i,'');default:return item.title}}
-const elapsed=(span:ProcessSpan,now=Date.now())=>{const ms=Math.max(0,(span.finishedAt?Date.parse(span.finishedAt):now)-Date.parse(span.startedAt));return ms<60_000?`${Math.max(1,Math.round(ms/1000))}s`:`${Math.floor(ms/60_000)}m ${String(Math.round(ms/1000)%60).padStart(2,'0')}s`};
-const lastWhere=(items:StreamItem[],predicate:(item:StreamItem)=>boolean)=>[...items].reverse().find(predicate);
-export const processSummary=(process:TimelineProcess)=>{if('bundle'in process)return`${process.processes.length} short processes`;const consequential=lastWhere(process.stream,(item)=>item.lifecycle==='failed')??lastWhere(process.stream,(item)=>item.kind==='question')??lastWhere(process.stream,(item)=>item.authority==='evidence');if(consequential)return consequential.kind==='narration'?consequential.title:semanticToolLabel(consequential);const decision=process.actor==='manager'?lastWhere(process.stream,(item)=>item.kind==='narration'):undefined;return decision?.title??lastWhere(process.stream,(item)=>item.kind==='narration')?.title??(process.stream.at(-1)?.kind==='narration'?process.stream.at(-1)?.title:process.stream.at(-1)?semanticToolLabel(process.stream.at(-1)!):undefined)??'Recorded work'};
-
-export const TEXT_RENDER_IMMEDIATE=512,TEXT_RENDER_PACE_MS=24;
-const pacedStep=(size:number)=>size<=12?2:size<=48?4:size<=96?8:Math.min(256,Math.ceil(size/4));
-export function nextPacedText(text:string,start:number):string{const end=Math.min(text.length,start+pacedStep(text.length-start)),max=Math.min(text.length,end+8);for(let index=end;index<max;index++)if(/[\s.,!?;:)\]]/.test(text[index]??''))return text.slice(0,index+1);return text.slice(0,end)}
-function usePacedText(value:string,active:boolean){const [shown,setShown]=useState(value),shownRef=useRef(value),target=useRef(value),timer=useRef<ReturnType<typeof setTimeout>|undefined>(undefined);shownRef.current=shown;useEffect(()=>{target.current=value;const sync=(text:string)=>{shownRef.current=text;setShown(text)};if(!active||!value.startsWith(shownRef.current)||value.length<=shownRef.current.length||value.length-shownRef.current.length<=TEXT_RENDER_IMMEDIATE){if(timer.current)clearTimeout(timer.current);timer.current=undefined;sync(value);return}const run=()=>{timer.current=undefined;const text=target.current,current=shownRef.current;if(!active||!text.startsWith(current)||text.length<=current.length||text.length-current.length<=TEXT_RENDER_IMMEDIATE){sync(text);return}sync(nextPacedText(text,current.length));if(shownRef.current.length<text.length)timer.current=setTimeout(run,TEXT_RENDER_PACE_MS)};if(!timer.current)timer.current=setTimeout(run,TEXT_RENDER_PACE_MS);return()=>{if(timer.current)clearTimeout(timer.current);timer.current=undefined}},[value,active]);return shown}
-function Narration({item,live}:{item:StreamItem;live:boolean}){const text=usePacedText(item.title,live&&item.lifecycle!=='completed');return item.title.length>420?<details className="narration-disclosure"><summary className="agent-prose"><span data-testid={`narration:${item.id}`}>{text.slice(0,280)}{text.length>280?'…':''}</span> <span>Read full explanation</span></summary><p className="agent-prose" data-testid={`narration-full:${item.id}`}>{item.title}</p></details>:<p className="agent-prose" data-testid={`narration:${item.id}`}>{text}</p>}
-function ToolRow({item}:{item:StreamItem}){const running=item.lifecycle==='started'||item.lifecycle==='updated',failed=item.lifecycle==='failed';return <details className={`tool-row tool-${item.kind} lifecycle-${item.lifecycle}`}><summary><span className="tool-glyph">{failed?'!':item.kind==='command'&&item.lifecycle==='completed'?'✓':GLYPH[item.kind]}</span><span className={running?'tool-title running':'tool-title'}>{running&&item.kind==='command'?'Running ':''}{semanticToolLabel(item)}</span>{failed&&<span className="tool-result">failed</span>}</summary>{item.detail&&<pre>{item.detail}</pre>}</details>}
-function Stream({span,loading,loadEarlier}:{span:ProcessSpan;loading?:boolean;loadEarlier?:()=>void}){return <div className="process-stream" tabIndex={0} data-testid={`stream:${span.id}`}>{span.streamBounds.hasEarlier&&<button className="load-earlier" disabled={loading} onClick={loadEarlier}>{loading?'Loading…':'Load earlier activity'}</button>}{!span.streamBounds.complete&&!span.streamBounds.hasEarlier&&<div className="stream-bound">Recorded stream begins here</div>}{span.stream.length?<div className="stream-viewport" data-testid={`stream-viewport:${span.id}`}>{span.stream.map((item)=><div className={`stream-item stream-${item.kind}`} key={item.id}>{item.kind==='narration'?<Narration item={item} live={span.state==='live'}/>:<ToolRow item={item}/>}</div>)}</div>:<div className="truthful-working">{span.state==='live'?<><span className="working-mark"/>Working…</>:'No public stream was recorded.'}</div>}</div>}
-const processSpans=(process:TimelineProcess):ProcessSpan[]=>'bundle'in process?(process as ProcessBundle).processes:[process];
-
-function RequestDisclosure({request}:{request:string}){const [full,setFull]=useState(false);return <div className="request-disclosure"><button className="request-toggle" onClick={()=>setFull(true)}>View request ↗</button>{full&&<div className="request-sheet-backdrop" role="presentation" onMouseDown={(event)=>{if(event.target===event.currentTarget)setFull(false)}}><section className="request-sheet" role="dialog" aria-modal="true" aria-label="Full session request"><header><b>Session request</b><button onClick={()=>setFull(false)} aria-label="Close full request">Close</button></header><p>{request}</p></section></div>}</div>}
-
-function ClusterRow({cluster,expanded,toggle,loading,loadEarlier}:{cluster:ConcurrencyCluster;expanded:Set<string>;toggle:(id:string)=>void;loading:Set<string>;loadEarlier:(span:ProcessSpan)=>void}){const disclosures=cluster.processes.filter(({process})=>expanded.has(process.id));return <div className={`cluster-row lanes-${cluster.laneCount}`} data-testid={cluster.id}><div className="chronology-gap" style={{height:cluster.gapBefore}} aria-hidden="true"/><div className="cluster-canvas" style={{height:cluster.height}}><time>{new Date(cluster.start).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</time><div className="time-node" aria-hidden="true"/>{cluster.processes.map(({process,lane,top,height})=>{const settled=!['live','waiting'].includes(process.state);return <article key={process.id} className={`span-card actor-${process.actor} state-${process.state}${'bundle'in process?' process-bundle':''}`} style={{top,height,left:`calc(${lane/cluster.laneCount*100}% + 70px)`,width:`calc(${100/cluster.laneCount}% - ${70/cluster.laneCount}px - 14px)`}}><button className="span-head" onClick={settled?()=>toggle(process.id):undefined} aria-expanded={expanded.has(process.id)}><span className="role-chip">{process.actor}</span><span className="process-title">{process.label.replace(/^(Manager|Worker|Validation)\s*[·:]?\s*/i,'')||process.label}</span><span className="span-meta">{process.state==='live'?'LIVE':elapsed(process)}{settled?'  ›':''}</span></button>{process.state==='live'?<Stream span={process} loading={loading.has(process.id)} loadEarlier={()=>loadEarlier(process)}/>:<div className="compact-summary"><span>{processSummary(process)}</span><small>{'bundle'in process?`${process.processes.length} processes`:`${process.stream.length} event${process.stream.length===1?'':'s'}`}</small></div>}</article>})}</div>{disclosures.map(({process})=><div className={`inline-disclosure actor-${process.actor}`} key={`disclosure:${process.id}`} data-testid={`disclosure:${process.id}`}><div className="disclosure-rail" aria-hidden="true"/><header><span className="role-chip">{process.actor}</span><b>{process.label}</b><span>{elapsed(process)}</span><button onClick={()=>toggle(process.id)}>Close</button></header>{processSpans(process).map((span)=><Stream key={span.id} span={span} loading={loading.has(span.id)} loadEarlier={()=>loadEarlier(span)}/>)}</div>)}</div>}
-
-export function SessionTimeline({timeline,onLoadEarlier,onBootstrapDiagnostic}:{timeline:Timeline;onLoadEarlier:(span:ProcessSpan)=>Promise<void>;onBootstrapDiagnostic?:(diagnostic:TimelineBootstrapDiagnostic)=>void}){const [zoom,setZoom]=useState(()=>{const value=Number(globalThis.localStorage?.getItem('delegate-wave.timeline-scale'));return Number.isFinite(value)&&value>=3&&value<=18?value:8}),[expanded,setExpanded]=useState<Set<string>>(()=>new Set()),[following,setFollowing]=useState(true),[newCount,setNewCount]=useState(0),[clock,setClock]=useState(Date.now()),[loading,setLoading]=useState<Set<string>>(()=>new Set());const listRef=useRef<HTMLDivElement|null>(null),listHostRef=useRef<HTMLDivElement|null>(null),revision=useRef(timeline.revision),rearmRequested=useRef(false),listLoaded=useRef(false),renderedItems=useRef(new Set<string>());
-  useEffect(()=>localStorage.setItem('delegate-wave.timeline-scale',String(zoom)),[zoom]);
-  useEffect(()=>{if(timeline.session.state==='settled')return;const timer=setInterval(()=>setClock(Date.now()),1000);return()=>clearInterval(timer)},[timeline.session.state]);useEffect(()=>{if(revision.current!==timeline.revision&&!following)setNewCount((count)=>count+1);revision.current=timeline.revision},[timeline.revision,following]);const processes=useMemo(()=>bundleMundaneProcesses(timeline.spans,clock),[timeline.spans,clock]),clusters=useMemo(()=>buildGeometry(processes,zoom,clock),[processes,zoom,clock]);const reportBootstrap=()=>{if(!onBootstrapDiagnostic)return;const bounds=listHostRef.current?.getBoundingClientRect();onBootstrapDiagnostic({suppliedClusters:clusters.length,viewportWidth:bounds?.width??0,viewportHeight:bounds?.height??0,listLoaded:listLoaded.current,renderedItems:renderedItems.current.size})};useLayoutEffect(()=>{const list=listRef.current;if(!list)return;listLoaded.current=true;if(following)list.scrollTop=list.scrollHeight;reportBootstrap()},[clusters,following]);useEffect(()=>{reportBootstrap();const host=listHostRef.current;if(!host||!onBootstrapDiagnostic||typeof ResizeObserver==='undefined')return;const observer=new ResizeObserver(reportBootstrap);observer.observe(host);return()=>observer.disconnect()},[clusters.length,onBootstrapDiagnostic]);
-  const onScroll=(event:React.UIEvent<HTMLDivElement>)=>{const viewport=event.currentTarget,distance=viewport.scrollHeight-viewport.scrollTop-viewport.clientHeight,atEnd=distance<=40;if(atEnd){if(rearmRequested.current||following){setFollowing(true);setNewCount(0)}rearmRequested.current=false}else if(distance>40){setFollowing(false);rearmRequested.current=false}};const jumpLatest=()=>{const viewport=listRef.current;if(!viewport)return;viewport.scrollTop=viewport.scrollHeight;const distance=viewport.scrollHeight-viewport.scrollTop-viewport.clientHeight;if(distance<=40){setFollowing(true);setNewCount(0);rearmRequested.current=false}else rearmRequested.current=true};const loadEarlier=async(span:ProcessSpan)=>{if(!span.streamBounds.cursor||loading.has(span.id))return;setLoading((current)=>new Set(current).add(span.id));try{await onLoadEarlier(span)}finally{setLoading((current)=>{const next=new Set(current);next.delete(span.id);return next})}};const started=new Date(timeline.session.startedAt),ended=timeline.session.settledAt?Date.parse(timeline.session.settledAt):clock,total=Math.max(0,ended-started.getTime());
-  return <section className="timeline-panel"><header className="timeline-header"><div className="session-mast"><div><h1>{timeline.session.intent}</h1><div className="session-context"><span>Hermes · {started.toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'})}</span><RequestDisclosure request={timeline.session.intent}/></div></div><span className={`session-state state-${timeline.session.state}`}>{timeline.session.state} · {Math.floor(total/60_000)}m {String(Math.round(total/1000)%60).padStart(2,'0')}s</span></div><div className="zoom" title={`${zoom} px per minute`} aria-label="Time scale"><button aria-label="Decrease time scale" disabled={zoom<=3} onClick={()=>setZoom((value)=>Math.max(3,value-1))}>−</button><button className="zoom-fit" onClick={()=>setZoom(8)}>Fit</button><button aria-label="Increase time scale" disabled={zoom>=18} onClick={()=>setZoom((value)=>Math.min(18,value+1))}>+</button></div></header><div className="timeline-list-host" ref={listHostRef}><div ref={listRef} className="timeline-list" onScroll={onScroll}><div className="board-label">TIME <span>↓</span></div>{clusters.map((cluster)=>{renderedItems.current.add(cluster.id);return <ClusterRow key={cluster.id} cluster={cluster} expanded={expanded} loading={loading} toggle={(id)=>setExpanded((current)=>{const next=new Set(current);next.has(id)?next.delete(id):next.add(id);return next})} loadEarlier={(span)=>void loadEarlier(span)}/>})}<div className="latest-rule"><span>{timeline.session.state==='settled'?'FINISHED':'LIVE'}</span></div></div></div>{!following&&<button className="return-live" onClick={jumpLatest}>↓ {timeline.session.state==='settled'?'Jump to latest':'Return to live'}{newCount?` · ${newCount} updates`:''}</button>}</section>}
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import { PatchDiff } from "@pierre/diffs/react";
+import {
+  BookOpen,
+  Bot,
+  CircleAlert,
+  FilePenLine,
+  Search,
+  Terminal,
+  Waypoints,
+} from "lucide-react";
+import {
+  buildFeedGroups,
+  type ProcessSpan,
+  type SessionTimeline as Timeline,
+  type StreamItem,
+} from "./model";
+export interface TimelineBootstrapDiagnostic {
+  suppliedClusters: number;
+  viewportWidth: number;
+  viewportHeight: number;
+  listLoaded: boolean;
+  renderedItems: number;
+}
+export const TEXT_RENDER_IMMEDIATE = 512,
+  TEXT_RENDER_PACE_MS = 24;
+const step = (n: number) =>
+  n <= 12 ? 2 : n <= 48 ? 4 : n <= 96 ? 8 : Math.min(256, Math.ceil(n / 4));
+export function nextPacedText(t: string, s: number) {
+  const e = Math.min(t.length, s + step(t.length - s)),
+    m = Math.min(t.length, e + 8);
+  for (let i = e; i < m; i++)
+    if (/[\s.,!?;:)\]]/.test(t[i] ?? "")) return t.slice(0, i + 1);
+  return t.slice(0, e);
+}
+function usePacedText(value: string, active: boolean) {
+  const [shown, setShown] = useState(value),
+    ref = useRef(value),
+    target = useRef(value),
+    timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  ref.current = shown;
+  useEffect(() => {
+    target.current = value;
+    const sync = (v: string) => {
+      ref.current = v;
+      setShown(v);
+    };
+    if (
+      !active ||
+      !value.startsWith(ref.current) ||
+      value.length - ref.current.length <= 512
+    ) {
+      if (timer.current) clearTimeout(timer.current);
+      sync(value);
+      return;
+    }
+    const run = () => {
+      const v = target.current,
+        c = ref.current;
+      if (!active || !v.startsWith(c) || v.length - c.length <= 512) {
+        sync(v);
+        return;
+      }
+      sync(nextPacedText(v, c.length));
+      timer.current = setTimeout(run, 24);
+    };
+    timer.current = setTimeout(run, 24);
+    return () => {
+      if (timer.current) clearTimeout(timer.current);
+    };
+  }, [value, active]);
+  return shown;
+}
+const compact = (v = "") =>
+  v
+    .replace(/<[^>]+>/g, " ")
+    .replace(/["'`]/g, "")
+    .trim()
+    .split(/[\\/]/)
+    .filter(Boolean)
+    .at(-1) ?? v;
+const target = (i: StreamItem) => {
+  const x = i.tool?.input;
+  return (
+    x?.filePath ??
+    x?.file_path ??
+    x?.path ??
+    x?.pattern ??
+    x?.query ??
+    x?.description
+  );
+};
+export function semanticToolLabel(i: StreamItem) {
+  const t = target(i);
+  if (i.kind === "read")
+    return `Read ${compact(t ?? i.title.replace(/^Read\s+/i, ""))}`;
+  if (i.kind === "search")
+    return `Search ${t ?? i.title.replace(/^(Search|Grep|Glob)\s+/i, "")}`;
+  if (i.kind === "edit")
+    return `Edit ${compact(t ?? i.title.replace(/^(Edit|Write)\s+/i, ""))}`;
+  if (i.kind === "command")
+    return (
+      i.tool?.input?.command ??
+      i.title.replace(/^(Bash|Command|Run)\s*[:·-]?\s*/i, "")
+    );
+  if (i.kind === "todo") return "Update tasks";
+  if (i.kind === "agent") return `Delegate ${t ?? i.title}`;
+  return i.title;
+}
+const elapsed = (s: ProcessSpan, now = Date.now()) => {
+  const ms = Math.max(
+    0,
+    (s.finishedAt ? Date.parse(s.finishedAt) : now) - Date.parse(s.startedAt),
+  );
+  return ms < 60000
+    ? `${Math.max(1, Math.round(ms / 1000))}s`
+    : `${Math.floor(ms / 60000)}m ${String(Math.round(ms / 1000) % 60).padStart(2, "0")}s`;
+};
+const last = (a: StreamItem[], p: (i: StreamItem) => boolean) =>
+  [...a].reverse().find(p);
+export const processSummary = (s: ProcessSpan) => {
+  const i =
+    last(s.stream, (x) => x.lifecycle === "failed") ??
+    last(s.stream, (x) => x.kind === "question") ??
+    last(s.stream, (x) => x.authority === "evidence") ??
+    last(s.stream, (x) => x.kind === "narration") ??
+    s.stream.at(-1);
+  return i
+    ? i.kind === "narration"
+      ? (i.text ?? i.title)
+      : semanticToolLabel(i)
+    : "Recorded work";
+};
+function Narration({ item, live }: { item: StreamItem; live: boolean }) {
+  const text = usePacedText(
+    item.text ?? item.title,
+    live && item.lifecycle !== "completed",
+  );
+  return (
+    <div className="agent-prose" data-testid={`narration:${item.id}`}>
+      <ReactMarkdown remarkPlugins={[remarkGfm]}>{text}</ReactMarkdown>
+      {item.truncated && <small>Public text truncated.</small>}
+    </div>
+  );
+}
+const running = (i: StreamItem) =>
+  i.lifecycle === "started" || i.lifecycle === "updated";
+function Tool({
+  item,
+  icon,
+  children,
+}: {
+  item: StreamItem;
+  icon: React.ReactNode;
+  children?: React.ReactNode;
+}) {
+  const failed = item.lifecycle === "failed" || !!item.tool?.error;
+  return (
+    <details
+      className={`agent-tool tool-${item.kind} lifecycle-${item.lifecycle}`}
+    >
+      <summary>
+        <span className="agent-tool-icon">
+          {failed ? <CircleAlert /> : icon}
+        </span>
+        <span
+          className={
+            running(item) ? "agent-tool-title running" : "agent-tool-title"
+          }
+        >
+          {semanticToolLabel(item)}
+        </span>
+        {running(item) && <small>running</small>}
+        {failed && <small className="tool-failed">failed</small>}
+      </summary>
+      {children}
+    </details>
+  );
+}
+function Item({ item, live }: { item: StreamItem; live: boolean }) {
+  if (item.kind === "narration") return <Narration item={item} live={live} />;
+  const body = item.tool?.error ?? item.tool?.output ?? item.detail;
+  if (item.kind === "edit") {
+    const diff = item.tool?.metadata?.diff;
+    return (
+      <Tool item={item} icon={<FilePenLine />}>
+        {diff ? (
+          <div className="file-diff">
+            <PatchDiff patch={diff} disableWorkerPool />
+          </div>
+        ) : (
+          body && <pre>{body}</pre>
+        )}
+      </Tool>
+    );
+  }
+  const icon =
+    item.kind === "read" ? (
+      <BookOpen />
+    ) : item.kind === "search" || item.kind === "web" ? (
+      <Search />
+    ) : item.kind === "command" ? (
+      <Terminal />
+    ) : item.kind === "agent" ? (
+      <Bot />
+    ) : (
+      <Waypoints />
+    );
+  return (
+    <Tool item={item} icon={icon}>
+      {body && (
+        <pre
+          className={
+            item.kind === "command" ? "terminal-output" : "technical-detail"
+          }
+        >
+          {body}
+        </pre>
+      )}
+    </Tool>
+  );
+}
+const routine = (i: StreamItem) =>
+  !running(i) &&
+  i.lifecycle !== "failed" &&
+  i.authority !== "evidence" &&
+  ["read", "search", "command", "todo", "web", "other"].includes(i.kind);
+type Part =
+  { type: "item"; item: StreamItem } | { type: "group"; items: StreamItem[] };
+export function buildTurnParts(items: StreamItem[]): Part[] {
+  const out: Part[] = [];
+  let p: StreamItem[] = [];
+  const flush = () => {
+    if (p.length > 1) out.push({ type: "group", items: p });
+    else p.forEach((item) => out.push({ type: "item", item }));
+    p = [];
+  };
+  for (const i of items)
+    routine(i) ? p.push(i) : (flush(), out.push({ type: "item", item: i }));
+  flush();
+  return out;
+}
+function groupLabel(a: StreamItem[]) {
+  const n = { read: 0, search: 0, command: 0, other: 0 };
+  a.forEach((i) =>
+    i.kind === "read"
+      ? n.read++
+      : i.kind === "search" || i.kind === "web"
+        ? n.search++
+        : i.kind === "command"
+          ? n.command++
+          : n.other++,
+  );
+  return [
+    [n.read, `Read ${n.read} files`],
+    [n.search, `Searched code ${n.search} times`],
+    [n.command, `Ran ${n.command} commands`],
+    [n.other, `${n.other} other actions`],
+  ]
+    .filter((x) => x[0])
+    .map((x) => x[1])
+    .join(" · ");
+}
+function Stream({
+  span,
+  loading,
+  loadEarlier,
+}: {
+  span: ProcessSpan;
+  loading: boolean;
+  loadEarlier: () => void;
+}) {
+  return (
+    <div className="agent-turn-stream" data-testid={`stream:${span.id}`}>
+      {span.streamBounds.hasEarlier && (
+        <button
+          className="load-earlier"
+          disabled={loading}
+          onClick={loadEarlier}
+        >
+          {loading ? "Loading…" : "Load earlier activity"}
+        </button>
+      )}
+      {buildTurnParts(span.stream).map((p, i) =>
+        p.type === "group" ? (
+          <details className="tool-group" key={`g${i}`}>
+            <summary>
+              <Waypoints />
+              <span>{groupLabel(p.items)}</span>
+              <small>Show actions</small>
+            </summary>
+            <div>
+              {p.items.map((x) => (
+                <Item key={x.id} item={x} live={false} />
+              ))}
+            </div>
+          </details>
+        ) : (
+          <Item key={p.item.id} item={p.item} live={span.state === "live"} />
+        ),
+      )}
+      {!span.stream.length && (
+        <div className="truthful-working">
+          {span.state === "live"
+            ? "Working…"
+            : "No public stream was recorded."}
+        </div>
+      )}
+    </div>
+  );
+}
+function Card({
+  span,
+  open,
+  toggle,
+  loading,
+  load,
+}: {
+  span: ProcessSpan;
+  open: boolean;
+  toggle: () => void;
+  loading: boolean;
+  load: () => void;
+}) {
+  const attention =
+    span.state === "waiting" || span.stream.some((i) => i.kind === "question");
+  return (
+    <article
+      className={`process-card actor-${span.actor} state-${span.state}${open ? " expanded" : ""}`}
+      data-testid={`process:${span.id}`}
+    >
+      <button className="process-header" onClick={toggle} aria-expanded={open}>
+        <span className="role-chip">{span.actor}</span>
+        <b>
+          {span.label.replace(/^(Manager|Worker|Validation)\s*[·:]?\s*/i, "") ||
+            span.label}
+        </b>
+        <time>
+          {new Date(span.startedAt).toLocaleTimeString([], {
+            hour: "2-digit",
+            minute: "2-digit",
+          })}{" "}
+          · {span.state === "live" ? "LIVE" : elapsed(span)}
+        </time>
+        <span>{open ? "⌄" : "›"}</span>
+      </button>
+      {attention && !open && (
+        <div className="attention-summary">
+          <b>Needs input</b>
+          <span>Waiting for Hermes</span>
+        </div>
+      )}
+      {open ? (
+        <Stream span={span} loading={loading} loadEarlier={load} />
+      ) : (
+        <div className="compact-summary">{processSummary(span)}</div>
+      )}
+    </article>
+  );
+}
+function Request({ text, close }: { text: string; close: () => void }) {
+  return (
+    <div
+      className="request-sheet-backdrop"
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) close();
+      }}
+    >
+      <section className="request-sheet" role="dialog" aria-modal="true">
+        <header>
+          <b>Session request</b>
+          <button onClick={close}>Close</button>
+        </header>
+        <p>{text}</p>
+      </section>
+    </div>
+  );
+}
+export function SessionTimeline({
+  timeline,
+  onLoadEarlier,
+  onBootstrapDiagnostic,
+}: {
+  timeline: Timeline;
+  onLoadEarlier: (s: ProcessSpan) => Promise<void>;
+  onBootstrapDiagnostic?: (d: TimelineBootstrapDiagnostic) => void;
+}) {
+  const [open, setOpen] = useState<Set<string>>(
+      () =>
+        new Set(
+          timeline.spans
+            .filter((s) => s.state === "live" || s.state === "waiting")
+            .map((s) => s.id),
+        ),
+    ),
+    [following, setFollowing] = useState(true),
+    [updates, setUpdates] = useState(0),
+    [clock, setClock] = useState(Date.now()),
+    [loading, setLoading] = useState<Set<string>>(new Set()),
+    [request, setRequest] = useState(false),
+    [scale, setScale] = useState(() => {
+      const n = Number(localStorage.getItem("delegate-wave.feed-scale"));
+      return Number.isFinite(n) ? Math.min(1.5, Math.max(0.8, n)) : 1;
+    });
+  const list = useRef<HTMLDivElement>(null),
+    host = useRef<HTMLDivElement>(null),
+    rev = useRef(timeline.revision);
+  useEffect(
+    () => localStorage.setItem("delegate-wave.feed-scale", String(scale)),
+    [scale],
+  );
+  useEffect(() => {
+    if (timeline.session.state === "settled") return;
+    const t = setInterval(() => setClock(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, [timeline.session.state]);
+  useEffect(() => {
+    if (rev.current !== timeline.revision && !following)
+      setUpdates((n) => n + 1);
+    rev.current = timeline.revision;
+  }, [timeline.revision, following]);
+  const groups = useMemo(
+    () => buildFeedGroups(timeline.spans, clock),
+    [timeline.spans, clock],
+  );
+  useLayoutEffect(() => {
+    if (following && list.current)
+      list.current.scrollTop = list.current.scrollHeight;
+    const b = host.current?.getBoundingClientRect();
+    onBootstrapDiagnostic?.({
+      suppliedClusters: groups.length,
+      viewportWidth: b?.width ?? 0,
+      viewportHeight: b?.height ?? 0,
+      listLoaded: !!list.current,
+      renderedItems: groups.length,
+    });
+  }, [groups, following, onBootstrapDiagnostic]);
+  const load = async (s: ProcessSpan) => {
+    if (!s.streamBounds.cursor) return;
+    setLoading((x) => new Set(x).add(s.id));
+    try {
+      await onLoadEarlier(s);
+    } finally {
+      setLoading((x) => {
+        const n = new Set(x);
+        n.delete(s.id);
+        return n;
+      });
+    }
+  };
+  const started = new Date(timeline.session.startedAt),
+    end = timeline.session.settledAt
+      ? Date.parse(timeline.session.settledAt)
+      : clock,
+    total = Math.max(0, end - started.getTime());
+  return (
+    <section className="timeline-panel">
+      <header className="timeline-header">
+        <button className="session-title" onClick={() => setRequest(true)}>
+          <h1>{timeline.session.intent}</h1>
+          <span>⌄</span>
+        </button>
+        <div className="session-context">
+          {timeline.session.originHermesSessionTitle ?? "Hermes"} ·{" "}
+          {started.toLocaleDateString(undefined, {
+            month: "short",
+            day: "numeric",
+          })}
+        </div>
+        <span className={`session-state state-${timeline.session.state}`}>
+          {timeline.session.state} · {Math.floor(total / 60000)}m{" "}
+          {String(Math.round(total / 1000) % 60).padStart(2, "0")}s
+        </span>
+      </header>
+      <div className="timeline-list-host" ref={host}>
+        <div
+          className="timeline-list coordination-feed"
+          ref={list}
+          style={{ "--feed-scale": scale } as React.CSSProperties}
+          onScroll={(e) => {
+            const v = e.currentTarget,
+              d = v.scrollHeight - v.scrollTop - v.clientHeight;
+            if (d <= 40) {
+              setFollowing(true);
+              setUpdates(0);
+            } else setFollowing(false);
+          }}
+          onWheel={(e) => {
+            if (!e.ctrlKey) return;
+            e.preventDefault();
+            setScale((x) =>
+              Math.min(
+                1.5,
+                Math.max(
+                  0.8,
+                  Number((x + (e.deltaY < 0 ? 0.1 : -0.1)).toFixed(2)),
+                ),
+              ),
+            );
+          }}
+        >
+          {groups.map((g) => (
+            <section
+              className={`feed-group${g.processes.length > 1 ? " parallel-group" : ""}`}
+              key={g.id}
+              data-testid={g.id}
+            >
+              <div className="feed-time">
+                {new Date(g.start).toLocaleTimeString([], {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })}
+                {g.processes.length > 1 && <span>parallel work</span>}
+              </div>
+              <div
+                className="feed-processes"
+                style={
+                  { "--lane-count": g.processes.length } as React.CSSProperties
+                }
+              >
+                {g.processes.map((s) => (
+                  <Card
+                    key={s.id}
+                    span={s}
+                    open={open.has(s.id)}
+                    toggle={() =>
+                      setOpen((x) => {
+                        const n = new Set(x);
+                        n.has(s.id) ? n.delete(s.id) : n.add(s.id);
+                        return n;
+                      })
+                    }
+                    loading={loading.has(s.id)}
+                    load={() => void load(s)}
+                  />
+                ))}
+              </div>
+            </section>
+          ))}
+          <div className="latest-rule">
+            <span>
+              {timeline.session.state === "settled" ? "FINISHED" : "LIVE"}
+            </span>
+          </div>
+        </div>
+      </div>
+      {!following && (
+        <button
+          className="return-live"
+          onClick={() => {
+            if (list.current)
+              list.current.scrollTop = list.current.scrollHeight;
+            setFollowing(true);
+            setUpdates(0);
+          }}
+        >
+          ↓{" "}
+          {timeline.session.state === "settled"
+            ? "Jump to latest"
+            : "Return to live"}
+          {updates ? ` · ${updates} updates` : ""}
+        </button>
+      )}
+      {request && (
+        <Request
+          text={timeline.session.intent}
+          close={() => setRequest(false)}
+        />
+      )}
+    </section>
+  );
+}

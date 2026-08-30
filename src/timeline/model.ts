@@ -1,12 +1,15 @@
 import { isRecord } from '../model/normalize';
 
 export type StreamKind = 'narration'|'read'|'search'|'edit'|'command'|'agent'|'question'|'todo'|'web'|'other';
-export interface StreamItem { id:string; kind:StreamKind; lifecycle:'started'|'updated'|'completed'|'failed'; title:string; detail?:string; occurredAt:string; authority:'activity'|'evidence' }
+export interface ToolInput { filePath?:string; file_path?:string; path?:string; command?:string; pattern?:string; query?:string; description?:string; offset?:number; limit?:number }
+export interface ToolMetadata { exitCode?:number; changedFiles?:string[]; diff?:string }
+export interface StructuredTool { name:string; input?:ToolInput; output?:string; error?:string; truncated?:boolean; metadata?:ToolMetadata }
+export interface StreamItem { id:string; kind:StreamKind; lifecycle:'started'|'updated'|'completed'|'failed'; title:string; text?:string; detail?:string; truncated?:boolean; tool?:StructuredTool; occurredAt:string; authority:'activity'|'evidence' }
 export interface StreamBounds { complete:boolean; hasEarlier:boolean; cursor?:string }
 export interface ProcessSpan { id:string; parentId?:string; actor:'manager'|'worker'|'validator'; label:string; state:'live'|'waiting'|'completed'|'failed'|'cancelled'; startedAt:string; finishedAt?:string; stream:StreamItem[]; streamBounds:StreamBounds }
 export interface ProcessBundle extends ProcessSpan { bundle:true; processes:ProcessSpan[] }
 export type TimelineProcess = ProcessSpan | ProcessBundle;
-export interface SessionSummary { id:string; rootJobId?:string; intent:string; mode:string; state:'live'|'waiting'|'settled'; originHermesSessionId?:string; startedAt:string; settledAt?:string; updatedAt:string }
+export interface SessionSummary { id:string; rootJobId?:string; intent:string; mode:string; state:'live'|'waiting'|'settled'; originHermesSessionId?:string; originHermesSessionTitle?:string; startedAt:string; settledAt?:string; updatedAt:string }
 export interface SessionPage { sessions:SessionSummary[]; hasMore:boolean; nextCursor?:string }
 export interface SessionTimeline { session:SessionSummary; spans:ProcessSpan[]; revision:string; streamPageFor?:string }
 const str=(r:Record<string,unknown>,k:string):string|undefined=>typeof r[k]==='string'?r[k] as string:undefined;
@@ -17,8 +20,10 @@ function session(raw: unknown): SessionSummary | undefined {
   if(!id||!intent||!startedAt||!['live','waiting','settled'].includes(state??''))return;
   return { id,intent,mode:str(raw,'mode')??'UNKNOWN',state:state as SessionSummary['state'],startedAt,
     updatedAt:str(raw,'updated_at')??startedAt,rootJobId:str(raw,'root_job_id'),
-    originHermesSessionId:str(raw,'origin_hermes_session_id'),settledAt:str(raw,'settled_at') };
+    originHermesSessionId:str(raw,'origin_hermes_session_id'),originHermesSessionTitle:str(raw,'origin_hermes_session_title'),settledAt:str(raw,'settled_at') };
 }
+
+function toolFrom(raw:unknown):StructuredTool|undefined{if(!isRecord(raw)||typeof raw.name!=='string')return;const input=isRecord(raw.input)?raw.input:undefined,metadata=isRecord(raw.metadata)?raw.metadata:undefined;return{name:raw.name,input:input?{filePath:str(input,'filePath'),file_path:str(input,'file_path'),path:str(input,'path'),command:str(input,'command'),pattern:str(input,'pattern'),query:str(input,'query'),description:str(input,'description'),offset:typeof input.offset==='number'?input.offset:undefined,limit:typeof input.limit==='number'?input.limit:undefined}:undefined,output:str(raw,'output'),error:str(raw,'error'),truncated:raw.truncated===true,metadata:metadata?{exitCode:typeof metadata.exit_code==='number'?metadata.exit_code:undefined,changedFiles:Array.isArray(metadata.changed_files)?metadata.changed_files.filter((value):value is string=>typeof value==='string'):undefined,diff:str(metadata,'diff')}:undefined}}
 
 export function sessionPageFromRelay(value:unknown):SessionPage|undefined {
   if(!isRecord(value)||!Array.isArray(value.sessions))return;
@@ -31,7 +36,7 @@ export function timelineFromRelay(value:unknown):SessionTimeline|undefined {
   const summary=session(value.session);if(!summary)return;
   const spans=value.spans.flatMap((entry):ProcessSpan[]=>{
     if(!isRecord(entry)||typeof entry.id!=='string'||typeof entry.actor!=='string'||typeof entry.label!=='string'||typeof entry.state!=='string'||typeof entry.started_at!=='string')return[];
-    const stream=Array.isArray(entry.stream)?entry.stream.flatMap((item):StreamItem[]=>{if(!isRecord(item)||typeof item.id!=='string'||typeof item.kind!=='string'||typeof item.lifecycle!=='string'||typeof item.title!=='string')return[];return[{id:item.id,kind:item.kind as StreamKind,lifecycle:item.lifecycle as StreamItem['lifecycle'],title:item.title,detail:str(item,'detail'),occurredAt:str(item,'occurred_at')??entry.started_at as string,authority:item.authority==='evidence'?'evidence':'activity'}]}):[];
+    const stream=Array.isArray(entry.stream)?entry.stream.flatMap((item):StreamItem[]=>{if(!isRecord(item)||typeof item.id!=='string'||typeof item.kind!=='string'||typeof item.lifecycle!=='string'||typeof item.title!=='string')return[];return[{id:item.id,kind:item.kind as StreamKind,lifecycle:item.lifecycle as StreamItem['lifecycle'],title:item.title,text:str(item,'text'),detail:str(item,'detail'),truncated:item.truncated===true,tool:toolFrom(item.tool),occurredAt:str(item,'occurred_at')??entry.started_at as string,authority:item.authority==='evidence'?'evidence':'activity'}]}):[];
     const bounds=isRecord(entry.stream_bounds)?entry.stream_bounds:{};
     return [{id:entry.id,parentId:str(entry,'parent_id'),actor:entry.actor as ProcessSpan['actor'],label:entry.label,state:entry.state as ProcessSpan['state'],startedAt:entry.started_at,finishedAt:str(entry,'finished_at'),stream,streamBounds:{complete:bounds.complete===true,hasEarlier:bounds.has_earlier===true,cursor:str(bounds,'cursor')}}];
   });
@@ -62,3 +67,7 @@ export function bundleMundaneProcesses(spans:ProcessSpan[],now=Date.now()):Timel
 export interface PositionedProcess { process:TimelineProcess; lane:number; top:number; height:number }
 export interface ConcurrencyCluster { id:string; start:number; end:number; top:number; gapBefore:number; laneCount:number; height:number; processes:PositionedProcess[] }
 export function buildGeometry(spans:TimelineProcess[],pixelsPerMinute:number,now=Date.now()):ConcurrencyCluster[]{if(!spans.length)return[];const sorted=[...spans].sort((a,b)=>Date.parse(a.startedAt)-Date.parse(b.startedAt));const sessionStart=Date.parse(sorted[0]!.startedAt);const raw:Array<{items:TimelineProcess[];start:number;end:number}>=[];for(const process of sorted){const start=Date.parse(process.startedAt),end=process.finishedAt?Date.parse(process.finishedAt):now,last=raw.at(-1);if(!last||start>=last.end)raw.push({items:[process],start,end});else{last.items.push(process);last.end=Math.max(last.end,end)}}let previousEnd=sessionStart;return raw.map((cluster)=>{const laneEnds:number[]=[];const positioned=cluster.items.map((process)=>{const start=Date.parse(process.startedAt),end=process.finishedAt?Date.parse(process.finishedAt):now;let lane=laneEnds.findIndex((value)=>value<=start);if(lane<0){lane=laneEnds.length;laneEnds.push(end)}else laneEnds[lane]=end;return{process,lane,top:(start-cluster.start)/60_000*pixelsPerMinute,height:Math.max(72,(Math.max(end,start)-start)/60_000*pixelsPerMinute)}});const gapBefore=Math.max(0,(cluster.start-previousEnd)/60_000*pixelsPerMinute);previousEnd=cluster.end;const proportional=(cluster.end-cluster.start)/60_000*pixelsPerMinute;const contentBottom=Math.max(0,...positioned.map((item)=>item.top+item.height));return{id:`cluster:${cluster.items.map((item)=>item.id).join(':')}`,start:cluster.start,end:cluster.end,top:(cluster.start-sessionStart)/60_000*pixelsPerMinute,gapBefore,laneCount:Math.max(1,laneEnds.length),height:Math.max(88,proportional,contentBottom+8),processes:positioned}})}
+
+export interface FeedGroup { id:string; start:number; end:number; processes:ProcessSpan[] }
+/** Chronology is vertical; only genuine temporal overlap becomes horizontal composition. */
+export function buildFeedGroups(spans:ProcessSpan[],now=Date.now()):FeedGroup[]{const sorted=[...spans].sort((a,b)=>Date.parse(a.startedAt)-Date.parse(b.startedAt)||a.id.localeCompare(b.id)),groups:FeedGroup[]=[];for(const process of sorted){const start=Date.parse(process.startedAt),end=process.finishedAt?Date.parse(process.finishedAt):now,last=groups.at(-1);if(!last||start>=last.end)groups.push({id:`feed:${process.id}`,start,end,processes:[process]});else{last.processes.push(process);last.end=Math.max(last.end,end);last.id=`feed:${last.processes.map((item)=>item.id).join(':')}`}}return groups}

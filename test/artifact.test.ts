@@ -55,7 +55,9 @@ describe('the built Backpack artifact', () => {
     globalThis.ResizeObserver = class { observe() {} unobserve() {} disconnect() {} };
     // Importing the real built bundle: if the entry throws, fails to parse, or
     // mounts nothing, this is where it shows.
-    await import(/* @vite-ignore */ path.join(publicDir, 'assets', assets[0]!));
+    const entry = html.match(/<script[^>]*src="\.\/(assets\/[^\"]+)"/)?.[1];
+    expect(entry).toBeTruthy();
+    await import(/* @vite-ignore */ path.join(publicDir, entry!));
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     const root = document.getElementById('root');
