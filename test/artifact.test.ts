@@ -17,6 +17,7 @@ import path from 'node:path';
 
 const publicDir = path.join(process.cwd(), 'public');
 const html = readFileSync(path.join(publicDir, 'index.html'), 'utf8');
+const sourceCss = readFileSync(path.join(process.cwd(), 'src', 'ui', 'styles.css'), 'utf8');
 
 describe('the built Backpack artifact', () => {
   it('has a mount point and exactly one module entry', () => {
@@ -39,6 +40,11 @@ describe('the built Backpack artifact', () => {
     const src = html.match(/<script[^>]*src="([^"]+)"/)?.[1];
     expect(src).toBeTruthy();
     expect(src!.startsWith('/')).toBe(false);
+  });
+
+  it('keeps the inline request preview out of a nested scroll viewport', () => {
+    expect(sourceCss).toMatch(/\.request-preview p\s*\{[^}]*-webkit-line-clamp:\s*4;/s);
+    expect(sourceCss).not.toMatch(/\.request-(?:disclosure|preview)[^{]*\{[^}]*overflow:\s*auto/s);
   });
 
   it('executes and mounts something into #root', async () => {
