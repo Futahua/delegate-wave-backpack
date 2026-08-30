@@ -14,6 +14,7 @@ import { RunTable } from './RunList';
 import { RunDetail, type DetailState } from './RunDetail';
 import { StatusTag } from './pieces';
 import { fmtClock, fmtMoney } from './format';
+import { FixtureLab } from '../live-work/FixtureLab';
 
 type Boot = 'loading' | 'ready' | 'offline' | 'error';
 type Nav = 'overview' | 'active' | 'attention' | 'ready' | 'settled' | 'run';
@@ -71,6 +72,7 @@ function navForBucket(b: Bucket): Nav {
 }
 
 export default function App(): React.JSX.Element {
+  if (new URLSearchParams(window.location.search).get('fixture') === 'watch') return <FixtureLab />;
   const [boot, setBoot] = useState<Boot>('loading');
   const [conn, setConn] = useState<'ok' | 'none' | 'error'>('none');
   const [overview, setOverview] = useState<ReturnType<typeof normalizeOverview>>();
