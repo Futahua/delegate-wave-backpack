@@ -2,6 +2,14 @@ import { LegendList, type LegendListRef, type NativeSyntheticEvent, type NativeS
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { buildGeometry, bundleMundaneProcesses, type ConcurrencyCluster, type ProcessBundle, type ProcessSpan, type SessionTimeline as Timeline, type TimelineProcess } from './model';
 
+export interface TimelineBootstrapDiagnostic {
+  suppliedClusters: number;
+  viewportWidth: number;
+  viewportHeight: number;
+  listLoaded: boolean;
+  renderedItems: number;
+}
+
 function Stream({ span, loading, loadEarlier }: { span: ProcessSpan; loading?: boolean; loadEarlier?: () => void }): React.JSX.Element {
   const rowHeight = 54, viewportRows = 9;
   const [start, setStart] = useState(0);
@@ -43,17 +51,25 @@ function ClusterRow({ cluster, expanded, toggle, loading, loadEarlier }: {
   </div>;
 }
 
-export function SessionTimeline({ timeline, onLoadEarlier }: { timeline:Timeline; onLoadEarlier:(span:ProcessSpan)=>Promise<void> }): React.JSX.Element {
+export function SessionTimeline({ timeline, onLoadEarlier, onBootstrapDiagnostic }: {
+  timeline:Timeline;
+  onLoadEarlier:(span:ProcessSpan)=>Promise<void>;
+  onBootstrapDiagnostic?:(diagnostic:TimelineBootstrapDiagnostic)=>void;
+}): React.JSX.Element {
   const [zoom,setZoom]=useState(8),[expanded,setExpanded]=useState<Set<string>>(()=>new Set()),[following,setFollowing]=useState(true),[newCount,setNewCount]=useState(0),[clock,setClock]=useState(Date.now()),[loading,setLoading]=useState<Set<string>>(()=>new Set());
-  const listRef=useRef<LegendListRef|null>(null),revision=useRef(timeline.revision),rearmRequested=useRef(false);
+  const listRef=useRef<LegendListRef|null>(null),listHostRef=useRef<HTMLDivElement|null>(null),revision=useRef(timeline.revision),rearmRequested=useRef(false),listLoaded=useRef(false),renderedItems=useRef(new Set<string>());
   useEffect(()=>{if(timeline.session.state==='settled')return;const timer=setInterval(()=>setClock(Date.now()),1000);return()=>clearInterval(timer)},[timeline.session.state]);
   useEffect(()=>{if(revision.current!==timeline.revision&&!following)setNewCount((count)=>count+1);revision.current=timeline.revision},[timeline.revision,following]);
   const processes=useMemo(()=>bundleMundaneProcesses(timeline.spans,clock),[timeline.spans,clock]);
   const clusters=useMemo(()=>buildGeometry(processes,zoom,clock),[processes,zoom,clock]);
+  const reportBootstrap=()=>{if(!onBootstrapDiagnostic)return;const bounds=listHostRef.current?.getBoundingClientRect();onBootstrapDiagnostic({suppliedClusters:clusters.length,viewportWidth:bounds?.width??0,viewportHeight:bounds?.height??0,listLoaded:listLoaded.current,renderedItems:renderedItems.current.size})};
+  useEffect(()=>{reportBootstrap();const host=listHostRef.current;if(!host||!onBootstrapDiagnostic||typeof ResizeObserver==='undefined')return;const observer=new ResizeObserver(reportBootstrap);observer.observe(host);return()=>observer.disconnect()},[clusters.length,onBootstrapDiagnostic]);
   const onScroll=(event:NativeSyntheticEvent<NativeScrollEvent>)=>{const {contentOffset,contentSize,layoutMeasurement}=event.nativeEvent;const distance=contentSize.height-contentOffset.y-layoutMeasurement.height;const atEnd=distance<=40;if(atEnd){if(rearmRequested.current||following){setFollowing(true);setNewCount(0)}rearmRequested.current=false}else if(distance>40){setFollowing(false);rearmRequested.current=false}};
   const loadEarlier=async(span:ProcessSpan)=>{if(!span.streamBounds.cursor||loading.has(span.id))return;setLoading((current)=>new Set(current).add(span.id));try{await onLoadEarlier(span)}finally{setLoading((current)=>{const next=new Set(current);next.delete(span.id);return next})}};
   return <section className="timeline-panel"><header className="timeline-header"><div><span className="eyebrow">SESSION</span><h1>{timeline.session.intent}</h1><p>{timeline.session.state} · {new Date(timeline.session.startedAt).toLocaleString()}</p></div><label className="zoom">Compression <input type="range" min="3" max="18" value={zoom} onChange={(event)=>setZoom(Number(event.target.value))}/><b>{zoom} px/min</b></label></header>
-    <LegendList ref={listRef} style={{height:'100%'}} contentContainerStyle={{padding:'20px 30px 110px'}} data={clusters} extraData={{expanded,loading,following}} keyExtractor={(cluster)=>cluster.id} estimatedItemSize={220} initialScrollAtEnd maintainScrollAtEnd={following} maintainScrollAtEndThreshold={0.2} maintainVisibleContentPosition={{data:true}} onScroll={onScroll} scrollEventThrottle={16} renderItem={({item})=><ClusterRow cluster={item} expanded={expanded} loading={loading} toggle={(id)=>setExpanded((current)=>{const next=new Set(current);next.has(id)?next.delete(id):next.add(id);return next})} loadEarlier={(span)=>void loadEarlier(span)}/>}/>
+    <div className="timeline-list-host" ref={listHostRef}>
+      <LegendList ref={listRef} className="timeline-list" contentContainerStyle={{padding:'20px 30px 110px'}} data={clusters} extraData={{expanded,loading,following}} keyExtractor={(cluster)=>cluster.id} estimatedItemSize={220} initialScrollAtEnd maintainScrollAtEnd={following} maintainScrollAtEndThreshold={0.2} maintainVisibleContentPosition={{data:true}} onLoad={()=>{listLoaded.current=true;reportBootstrap()}} onScroll={onScroll} scrollEventThrottle={16} renderItem={({item})=>{renderedItems.current.add(item.id);if(onBootstrapDiagnostic)queueMicrotask(reportBootstrap);return <ClusterRow cluster={item} expanded={expanded} loading={loading} toggle={(id)=>setExpanded((current)=>{const next=new Set(current);next.has(id)?next.delete(id):next.add(id);return next})} loadEarlier={(span)=>void loadEarlier(span)}/>}}/>
+    </div>
     {!following&&<button className="return-live" onClick={()=>{rearmRequested.current=true;void listRef.current?.scrollToEnd({animated:true})}}>↓ Return to live{newCount?` · ${newCount} new`:''}</button>}
   </section>;
 }
