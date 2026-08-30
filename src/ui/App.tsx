@@ -8,6 +8,12 @@ export const HIDDEN_LIST_POLL = 5_000;
 export const VISIBLE_TIMELINE_POLL = 900;
 export const HIDDEN_TIMELINE_POLL = 5_000;
 
+export interface SessionConversationGroup { id:string; label:string; sessions:SessionSummary[] }
+export interface SessionDateSection { label:string; conversations:SessionConversationGroup[] }
+const dateLabel=(iso:string,now=new Date())=>{const date=new Date(iso),yesterday=new Date(now);yesterday.setDate(now.getDate()-1);const key=(d:Date)=>`${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;return key(date)===key(now)?'Today':key(date)===key(yesterday)?'Yesterday':date.toLocaleDateString(undefined,{month:'long',day:'numeric'})};
+const conversationLabel=(items:SessionSummary[])=>{const shortest=[...items].sort((a,b)=>a.intent.length-b.intent.length)[0]?.intent??'Hermes conversation';return shortest.split(/[.!?\n]/)[0]!.trim().slice(0,48)||'Hermes conversation'};
+export function buildSessionSections(sessions:SessionSummary[],now=new Date()):SessionDateSection[]{const dates=new Map<string,Map<string,SessionSummary[]>>();for(const item of sessions){const date=dateLabel(item.startedAt,now),identity=item.originHermesSessionId??`unlinked:${item.id}`,conversations=dates.get(date)??new Map<string,SessionSummary[]>();conversations.set(identity,[...(conversations.get(identity)??[]),item]);dates.set(date,conversations)}return[...dates].map(([label,conversations])=>({label,conversations:[...conversations].map(([id,items])=>({id,label:conversationLabel(items),sessions:[...items].sort((a,b)=>Date.parse(b.startedAt)-Date.parse(a.startedAt))}))}))}
+
 export function App(): React.JSX.Element {
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [selected, setSelected] = useState<string>();
@@ -106,16 +112,10 @@ export function App(): React.JSX.Element {
     if (page && current) { const merged = mergeStreamPage(current, page); timelineRef.current = merged; setTimeline(merged); }
   }, [selected]);
 
-  const groups = useMemo(() => {
-    const map = new Map<string, SessionSummary[]>();
-    const dateGroup=(iso:string)=>{const date=new Date(iso),today=new Date(),yesterday=new Date();yesterday.setDate(today.getDate()-1);const key=(d:Date)=>`${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;return key(date)===key(today)?'Today':key(date)===key(yesterday)?'Yesterday':date.toLocaleDateString(undefined,{month:'long',day:'numeric'})};
-    for (const item of sessions) { const key = dateGroup(item.startedAt); map.set(key, [...(map.get(key) ?? []), item]); }
-    for (const items of map.values()) items.sort((a, b) => Date.parse(b.startedAt) - Date.parse(a.startedAt));
-    return [...map];
-  }, [sessions]);
+  const groups = useMemo(() => buildSessionSections(sessions), [sessions]);
   const selectedTimeline = timeline?.session.id === selected ? timeline : undefined;
   const freshness = selectedTimeline ? timelineFreshness : indexFreshness;
-  return <div className="session-app"><aside className="session-sidebar"><header><span className="wave-mark">↗</span><div><b>Delegate Wave</b><small>Agent sessions</small></div></header><div className="session-groups">{groups.map(([group,items]) => <section key={group}><h2>{group}</h2>{items.map((item) => <button title={`Hermes ${item.originHermesSessionId??'unlinked'} · Session ${item.id}`} className={selected === item.id ? 'selected' : ''} key={item.id} onClick={() => { setSelected(item.id); setTimeline(undefined); }}><i className={`session-dot ${item.state}`}/><span><b>{item.intent}</b><small>{item.state} · {new Date(item.startedAt).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</small></span></button>)}</section>)}</div><footer>{freshness === 'fresh' ? 'Watching durable work' : freshness === 'stale' ? 'Offline · last confirmed' : 'Connecting…'}</footer></aside><main className="session-main">{selectedTimeline ? <><div className={`freshness freshness-${freshness}`}>{freshness === 'stale' ? 'Offline · showing last confirmed revision' : ''}</div><SessionTimeline timeline={selectedTimeline} onLoadEarlier={loadEarlier}/></> : <div className="timeline-empty"><div className="pulse"/><h1>{selected ? 'Reconstructing durable history…' : 'Your delegated work appears here'}</h1><p>{message || 'Reading the exact session timeline.'}</p></div>}</main></div>;
+  return <div className="session-app"><aside className="session-sidebar"><header><span className="wave-mark">↗</span><div><b>Delegate Wave</b><small>Agent sessions</small></div></header><div className="session-groups">{groups.map((group) => <section key={group.label}><h2>{group.label}</h2>{group.conversations.map((conversation)=><div className="conversation-group" key={conversation.id}><h3 title={`Hermes ${conversation.id}`}>{conversation.label}</h3>{conversation.sessions.map((item) => <button title={`Hermes ${item.originHermesSessionId??'unlinked'} · Session ${item.id}`} className={selected === item.id ? 'selected' : ''} key={item.id} onClick={() => { setSelected(item.id); setTimeline(undefined); }}><i className={`session-dot ${item.state}`}/><span><b>{item.intent}</b><small>{item.state} · {new Date(item.startedAt).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</small></span></button>)}</div>)}</section>)}</div><footer>{freshness === 'fresh' ? 'Watching durable work' : freshness === 'stale' ? 'Offline · last confirmed' : 'Connecting…'}</footer></aside><main className="session-main">{selectedTimeline ? <><div className={`freshness freshness-${freshness}`}>{freshness === 'stale' ? 'Offline · showing last confirmed revision' : ''}</div><SessionTimeline timeline={selectedTimeline} onLoadEarlier={loadEarlier}/></> : <div className="timeline-empty"><div className="pulse"/><h1>{selected ? 'Reconstructing durable history…' : 'Your delegated work appears here'}</h1><p>{message || 'Reading the exact session timeline.'}</p></div>}</main></div>;
 }
 
 export default App;
