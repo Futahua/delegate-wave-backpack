@@ -145,6 +145,19 @@ export const processPreview = (s: ProcessSpan) => {
   const summary = processSummary(s).trim();
   return summary.split(/\n\s*\n/, 1)[0]?.replace(/\s*\n\s*/g, " ") ?? summary;
 };
+export const isValidatorReceipt = (s: ProcessSpan) =>
+  s.actor === "validator" &&
+  s.state === "completed" &&
+  !s.stream.some((x) => x.lifecycle === "failed" || x.kind === "question");
+const validatorLabel = (s: ProcessSpan) =>
+  s.label.split(/[·:]/)[0]?.trim() || s.label;
+const validatorCommand = (s: ProcessSpan) => {
+  const item = last(
+    s.stream,
+    (x) => x.kind === "command" && x.lifecycle === "completed",
+  );
+  return item ? semanticToolLabel(item) : processSummary(s);
+};
 function Narration({ item, live }: { item: StreamItem; live: boolean }) {
   const text = usePacedText(
     item.text ?? item.title,
@@ -356,7 +369,12 @@ function Card({
   const [processFollowing, setProcessFollowing] = useState(true);
   const attention =
     span.state === "waiting" || span.stream.some((i) => i.kind === "question");
-  const consequential = span.state === "live" || span.state === "failed" || attention;
+  const consequential =
+    span.state === "live" ||
+    span.state === "failed" ||
+    attention ||
+    (span.state === "cancelled" && span.actor === "validator");
+  const receipt = isValidatorReceipt(span);
   useLayoutEffect(() => {
     if (!open || !viewport.current) return;
     const node = viewport.current;
@@ -370,7 +388,7 @@ function Card({
   };
   return (
     <article
-      className={`process-card actor-${span.actor} state-${span.state}${open ? " expanded" : ""}`}
+      className={`process-card actor-${span.actor} state-${span.state}${receipt ? " validator-receipt" : ""}${open ? " expanded" : ""}`}
       data-testid={`process:${span.id}`}
       style={{ gridColumn: open ? "1 / -1" : lane + 1 }}
     >
@@ -382,12 +400,20 @@ function Card({
       >
         <span className="role-chip">{span.actor}</span>
         <b>
-          {span.label.replace(/^(Manager|Worker|Validation)\s*[·:]?\s*/i, "") ||
-            span.label}
+          {receipt
+            ? validatorLabel(span)
+            : span.label.replace(/^(Manager|Worker|Validation)\s*[·:]?\s*/i, "") ||
+              span.label}
         </b>
         {consequential && (
           <span className="consequential-state">
-            {span.state === "live" ? "Live" : span.state === "failed" ? "Failed" : "Needs input"}
+            {span.state === "live"
+              ? "Live"
+              : span.state === "failed"
+                ? "Failed"
+                : span.state === "cancelled"
+                  ? "Cancelled"
+                  : "Needs input"}
           </span>
         )}
         <span className="process-elapsed" aria-label={`Elapsed ${elapsed(span)}`}>
@@ -412,6 +438,11 @@ function Card({
           }}
         >
           <Stream span={span} loading={loading} loadEarlier={load} />
+        </div>
+      ) : receipt ? (
+        <div className="validation-receipt">
+          <code className="receipt-command">{validatorCommand(span)}</code>
+          <span className="receipt-result">passed</span>
         </div>
       ) : (
         <div className="compact-summary markdown-preview">
