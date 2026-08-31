@@ -326,24 +326,49 @@ function Card({
   loading: boolean;
   load: () => void;
 }) {
+  const viewport = useRef<HTMLDivElement>(null);
+  const savedScrollTop = useRef(0);
+  const [processFollowing, setProcessFollowing] = useState(true);
   const attention =
     span.state === "waiting" || span.stream.some((i) => i.kind === "question");
+  const consequential = span.state === "live" || span.state === "failed" || attention;
+  useLayoutEffect(() => {
+    if (!open || !viewport.current) return;
+    const node = viewport.current;
+    node.scrollTop = processFollowing ? node.scrollHeight : savedScrollTop.current;
+  }, [open, span.stream.length, processFollowing]);
+  const returnToProcessLive = () => {
+    const node = viewport.current;
+    if (node) node.scrollTop = node.scrollHeight;
+    savedScrollTop.current = node?.scrollTop ?? 0;
+    setProcessFollowing(true);
+  };
   return (
     <article
       className={`process-card actor-${span.actor} state-${span.state}${open ? " expanded" : ""}`}
       data-testid={`process:${span.id}`}
-      style={{ gridColumn: lane + 1 }}
+      style={{ gridColumn: open ? "1 / -1" : lane + 1 }}
     >
-      <button className="process-header" onClick={toggle} aria-expanded={open}>
+      <button
+        className="process-header"
+        onClick={toggle}
+        aria-expanded={open}
+        aria-label={`${span.actor}, ${span.label}, ${span.state}, started ${new Date(span.startedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}${span.state === "live" ? "" : `, duration ${elapsed(span)}`}`}
+      >
         <span className="role-chip">{span.actor}</span>
         <b>
           {span.label.replace(/^(Manager|Worker|Validation)\s*[·:]?\s*/i, "") ||
             span.label}
         </b>
-        <time>
-          {span.state === "live" ? "LIVE" : elapsed(span)}
-        </time>
-        <span>{open ? "⌄" : "›"}</span>
+        {consequential && (
+          <span className="consequential-state">
+            {span.state === "live" ? "Live" : span.state === "failed" ? "Failed" : "Needs input"}
+          </span>
+        )}
+        <span className="process-meta" aria-hidden="true">
+          {new Date(span.startedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+          {span.state === "live" ? "" : ` · ${elapsed(span)}`}
+        </span>
       </button>
       {attention && !open && (
         <div className="attention-summary">
@@ -352,9 +377,25 @@ function Card({
         </div>
       )}
       {open ? (
-        <Stream span={span} loading={loading} loadEarlier={load} />
+        <div
+          className="process-scroll-viewport"
+          ref={viewport}
+          data-testid={`process-scroll:${span.id}`}
+          onScroll={(event) => {
+            const node = event.currentTarget;
+            savedScrollTop.current = node.scrollTop;
+            setProcessFollowing(node.scrollHeight - node.scrollTop - node.clientHeight <= 40);
+          }}
+        >
+          <Stream span={span} loading={loading} loadEarlier={load} />
+        </div>
       ) : (
         <div className="compact-summary">{processSummary(span)}</div>
+      )}
+      {open && span.state === "live" && !processFollowing && (
+        <button className="process-return-live" onClick={returnToProcessLive}>
+          ↓ Return to live
+        </button>
       )}
     </article>
   );
@@ -450,12 +491,27 @@ export function SessionTimeline({
     }
   };
   const started = new Date(timeline.session.startedAt);
+  const toggleProcess = (id: string) => {
+    const owner = list.current;
+    const findCard = () => [...(owner?.querySelectorAll<HTMLElement>("[data-testid^='process:']") ?? [])].find((node) => node.dataset.testid === `process:${id}`);
+    const card = findCard();
+    const top = card?.getBoundingClientRect().top;
+    setOpen((current) => {
+      const next = new Set(current);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+    if (owner && top !== undefined)
+      requestAnimationFrame(() => {
+        const moved = findCard();
+        if (moved) owner.scrollTop += moved.getBoundingClientRect().top - top;
+      });
+  };
   return (
     <section className="timeline-panel">
       <header className="timeline-header">
         <button className="session-title" onClick={() => setRequest(true)}>
           <h1>{timeline.session.intent}</h1>
-          <span>⌄</span>
         </button>
         <div className="session-context">
           {timeline.session.originHermesSessionTitle ?? "Hermes"} ·{" "}
@@ -498,7 +554,7 @@ export function SessionTimeline({
               key={g.id}
               data-testid={g.id}
             >
-              <div className="feed-time">
+              <div className="feed-time" aria-hidden="true">
                 {new Date(g.start).toLocaleTimeString([], {
                   hour: "2-digit",
                   minute: "2-digit",
@@ -508,19 +564,14 @@ export function SessionTimeline({
                 className="feed-processes"
                 style={{ "--lane-count": g.laneCount } as React.CSSProperties}
               >
+                {g.laneCount > 1 && <span className="parallel-label">Parallel work</span>}
                 {g.processes.map(({ process: s, lane }) => (
                   <Card
                     key={s.id}
                     span={s}
                     lane={lane}
                     open={open.has(s.id)}
-                    toggle={() =>
-                      setOpen((x) => {
-                        const n = new Set(x);
-                        n.has(s.id) ? n.delete(s.id) : n.add(s.id);
-                        return n;
-                      })
-                    }
+                    toggle={() => toggleProcess(s.id)}
                     loading={loading.has(s.id)}
                     load={() => void load(s)}
                   />
