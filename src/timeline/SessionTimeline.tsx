@@ -151,6 +151,9 @@ function Narration({ item, live }: { item: StreamItem; live: boolean }) {
 }
 const running = (i: StreamItem) =>
   i.lifecycle === "started" || i.lifecycle === "updated";
+function ActionLabel({ children }: { children: string }) {
+  return <>{children.split(/\b(Read|Search|Searched|Edit|Edited|Run|Ran|Update|Updated)\b/g).map((part, index) => /^(Read|Search|Searched|Edit|Edited|Run|Ran|Update|Updated)$/.test(part) ? <strong key={index}>{part}</strong> : part)}</>;
+}
 function Tool({
   item,
   icon,
@@ -174,7 +177,7 @@ function Tool({
             running(item) ? "agent-tool-title running" : "agent-tool-title"
           }
         >
-          {semanticToolLabel(item)}
+          <ActionLabel>{semanticToolLabel(item)}</ActionLabel>
         </span>
         {running(item) && <small>running</small>}
         {failed && <small className="tool-failed">failed</small>}
@@ -292,7 +295,7 @@ function Stream({
           <details className="tool-group" key={`g${i}`}>
             <summary>
               <Waypoints />
-              <span>{groupLabel(p.items)}</span>
+              <span><ActionLabel>{groupLabel(p.items)}</ActionLabel></span>
               <small>Show actions</small>
             </summary>
             <div>

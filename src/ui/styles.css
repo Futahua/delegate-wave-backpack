@@ -903,6 +903,7 @@ table.evidence .msg {
 .agent-prose h1{font-size:1.32em}.agent-prose h2{font-size:1.2em}.agent-prose h3{font-size:1.08em}.agent-prose h4,.agent-prose h5,.agent-prose h6{font-size:1em}
 .agent-prose p{margin:.25em 0}.agent-prose ul,.agent-prose ol{margin:.25em 0;padding-left:1.35em}.agent-prose li{margin:.08em 0;padding-left:.1em}.agent-prose li>p{margin:.08em 0}.agent-prose blockquote{margin:.35em 0;padding:.08em 0 .08em .75em;border-left:3px solid #bdc8c0;color:#536059}.agent-prose hr{margin:.65em 0;border:0;border-top:1px solid #d5dbd6}.agent-prose pre{margin:.35em 0;max-width:100%;overflow:auto}.agent-prose table{display:block;max-width:100%;margin:.35em 0;overflow:auto;border-collapse:collapse}.agent-prose th,.agent-prose td{padding:.3em .5em;border:1px solid #d4dad5;text-align:left}
 .process-card.expanded .agent-tool pre{max-width:100%;box-sizing:border-box;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere}
+.agent-tool-title strong,.tool-group summary strong{font-weight:700;color:#26332c}
 .process-return-live{position:absolute;right:1em;bottom:1em;z-index:3;padding:.55em .85em;border:1px solid #516e60;border-radius:999px;background:#26332e;color:#fff;box-shadow:0 5px 16px #26332e38;cursor:pointer}
 .process-scroll-viewport{scrollbar-width:thin;scrollbar-color:#89938e88 transparent}
 .process-scroll-viewport::-webkit-scrollbar{width:6px}.process-scroll-viewport::-webkit-scrollbar-thumb{border-radius:999px;background:#89938e66}
