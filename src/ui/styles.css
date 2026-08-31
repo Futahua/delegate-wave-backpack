@@ -895,7 +895,7 @@ table.evidence .msg {
 .process-scroll-viewport{min-height:0;max-height:min(60vh,680px);flex:0 1 auto;overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;scrollbar-gutter:stable}
 .process-card.expanded .agent-turn-stream{box-sizing:border-box;max-width:100%;min-height:0;padding:clamp(.4em,1vw,1em) clamp(1em,3vw,2.5em) 1.25em}
 .process-card.expanded .agent-prose{max-width:78ch;font-size:1em;line-height:1.65}
-.markdown-preview>*{display:inline;margin:0!important;padding:0!important;font:inherit;color:inherit}.markdown-preview ul,.markdown-preview ol{list-style:none}.markdown-preview li{display:inline}.markdown-preview li+li:before{content:" · "}.markdown-preview code{font:.92em ui-monospace,monospace}.markdown-preview strong{font-weight:650}
+.compact-summary.markdown-preview{font-size:1em}.markdown-preview>*{display:inline;margin:0!important;padding:0!important;font:inherit;color:inherit}.markdown-preview ul,.markdown-preview ol{list-style:none}.markdown-preview li{display:inline}.markdown-preview li+li:before{content:" · "}.markdown-preview code{font:.92em ui-monospace,monospace}.markdown-preview strong{font-weight:650}
 .agent-prose{margin:.35em 0;white-space:normal}
 .agent-prose :not(pre)>code{padding:.08em .3em;border:1px solid #b9c6d8;border-radius:4px;background:#e5ebf5;color:#24446b;font:.88em ui-monospace,monospace;-webkit-box-decoration-break:clone;box-decoration-break:clone}
 .agent-prose>:first-child{margin-top:0}.agent-prose>:last-child{margin-bottom:0}
