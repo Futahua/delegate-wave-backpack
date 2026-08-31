@@ -133,6 +133,10 @@ export const processSummary = (s: ProcessSpan) => {
       : semanticToolLabel(i)
     : "Recorded work";
 };
+export const processPreview = (s: ProcessSpan) => {
+  const summary = processSummary(s).trim();
+  return summary.split(/\n\s*\n/, 1)[0]?.replace(/\s*\n\s*/g, " ") ?? summary;
+};
 function Narration({ item, live }: { item: StreamItem; live: boolean }) {
   const text = usePacedText(
     item.text ?? item.title,
@@ -390,7 +394,9 @@ function Card({
           <Stream span={span} loading={loading} loadEarlier={load} />
         </div>
       ) : (
-        <div className="compact-summary">{processSummary(span)}</div>
+        <div className="compact-summary markdown-preview">
+          <ReactMarkdown remarkPlugins={[remarkGfm]}>{processPreview(span)}</ReactMarkdown>
+        </div>
       )}
       {open && span.state === "live" && !processFollowing && (
         <button className="process-return-live" onClick={returnToProcessLive}>
@@ -446,7 +452,13 @@ export function SessionTimeline({
     });
   const list = useRef<HTMLDivElement>(null),
     host = useRef<HTMLDivElement>(null),
-    rev = useRef(timeline.revision);
+    rev = useRef(timeline.revision),
+    sessionId = useRef(timeline.session.id);
+  useEffect(() => {
+    if (sessionId.current === timeline.session.id) return;
+    sessionId.current = timeline.session.id;
+    setOpen(new Set(timeline.spans.filter((s) => s.state === "live" || s.state === "waiting").map((s) => s.id)));
+  }, [timeline.session.id, timeline.spans]);
   useEffect(
     () => localStorage.setItem("delegate-wave.feed-scale", String(scale)),
     [scale],
@@ -554,12 +566,12 @@ export function SessionTimeline({
               key={g.id}
               data-testid={g.id}
             >
-              <div className="feed-time" aria-hidden="true">
+              <time className="feed-time" dateTime={new Date(g.start).toISOString()}>
                 {new Date(g.start).toLocaleTimeString([], {
                   hour: "2-digit",
                   minute: "2-digit",
                 })}
-              </div>
+              </time>
               <div
                 className="feed-processes"
                 style={{ "--lane-count": g.laneCount } as React.CSSProperties}
