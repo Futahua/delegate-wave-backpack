@@ -5,9 +5,9 @@ import type { SessionSummary } from '../timeline/model';
 
 type Wave = { session_id: string; name?: string; group_id?: string; archived_at?: string; deleted_at?: string };
 type Organization = { groups: { id: string; name: string }[]; waves: Wave[] };
-export function WaveOrganizer({sessions, selected, onSelect, collapsed, toggle}: {
+export function WaveOrganizer({sessions, selected, onSelect, collapsed, toggle, theme = 'light', toggleTheme = () => {}}: {
   sessions: SessionSummary[]; selected?: string; onSelect: (id?:string, name?:string)=>void;
-  collapsed: boolean; toggle: ()=>void;
+  collapsed: boolean; toggle: ()=>void; theme?: 'light'|'dark'; toggleTheme?: ()=>void;
 }) {
   const [org,setOrg]=useState<Organization>({groups:[],waves:[]});
   const [archive,setArchive]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState('');
@@ -72,6 +72,7 @@ export function WaveOrganizer({sessions, selected, onSelect, collapsed, toggle}:
   return <>
     <header className="session-nav-header">
       <button className="sidebar-toggle" aria-label={collapsed?'Expand sessions sidebar':'Collapse sessions sidebar'} onClick={toggle}>☰</button>
+      <button className="sidebar-toggle workspace-theme-toggle" aria-label={theme === 'dark' ? 'Use light mode' : 'Use dark mode'} title={theme === 'dark' ? 'Use light mode' : 'Use dark mode'} aria-pressed={theme === 'dark'} onClick={toggleTheme}><span aria-hidden="true">{theme === 'dark' ? '☼' : '☾'}</span></button>
       {!collapsed && <><button className="sidebar-toggle archive-toggle" aria-label={archive?'Return to waves':'Open wave archive'} aria-pressed={archive} onClick={()=>{setArchive(!archive);onSelect(undefined)}}>
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M3 4h18v4H3zM5 8v12h14V8M9 12h6"/></svg>
       </button><button className="sidebar-toggle" aria-label="Create wave group" disabled={!ready||busy} onClick={()=>setEditing({action:'group.create',name:''})}>+</button></>}

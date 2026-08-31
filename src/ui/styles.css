@@ -1009,3 +1009,5 @@ table.evidence .msg {
 .session-app[data-theme="dark"] .agent-prose :not(pre)>code{border-color:#526b87;background:#24354a;color:#d2e4ff}
 .session-app[data-theme="dark"] .process-card.validator-receipt .process-header b.receipt-command,.session-app[data-theme="dark"] .process-card.validator-receipt .process-elapsed,.session-app[data-theme="dark"] .validation-receipt .receipt-result{color:#e2c783}
 .session-app[data-theme="dark"] .process-card.validator-receipt .role-chip{background:#b5985833;color:#efd895}
+.session-nav-header .workspace-theme-toggle{position:static;z-index:auto;width:30px;height:30px;box-sizing:border-box;padding:0;border-radius:6px;box-shadow:none;flex:none}
+.session-nav-header .workspace-theme-toggle>span:first-child{font-size:16px;line-height:1}

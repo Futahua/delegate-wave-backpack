@@ -321,26 +321,11 @@ export function App(): React.JSX.Element {
           <aside
             className={`session-sidebar${sidebarCollapsed ? " collapsed" : ""}`}
           >
-            <WaveOrganizer sessions={sessions} selected={selected} collapsed={sidebarCollapsed} toggle={toggleSidebar} onSelect={(id,name) => {if(id!==selected)setTimeline(undefined);setSelected(id);setSelectedName(name)}} />
+            <WaveOrganizer sessions={sessions} selected={selected} collapsed={sidebarCollapsed} toggle={toggleSidebar} theme={workspaceTheme} toggleTheme={toggleWorkspaceTheme} onSelect={(id,name) => {if(id!==selected)setTimeline(undefined);setSelected(id);setSelectedName(name)}} />
           </aside>
         </Pane>
         <Pane minSize={360}>
           <main className="session-main">
-            <button
-              className="workspace-theme-toggle"
-              type="button"
-              aria-label={
-                workspaceTheme === "dark" ? "Use light mode" : "Use dark mode"
-              }
-              title={
-                workspaceTheme === "dark" ? "Use light mode" : "Use dark mode"
-              }
-              aria-pressed={workspaceTheme === "dark"}
-              onClick={toggleWorkspaceTheme}
-            >
-              <span aria-hidden="true">{workspaceTheme === "dark" ? "☼" : "☾"}</span>
-              <span>{workspaceTheme === "dark" ? "Light" : "Dark"}</span>
-            </button>
             {selectedTimeline ? (
               <>
                 <div className={`freshness freshness-${freshness}`}>

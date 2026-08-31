@@ -36,9 +36,10 @@ afterEach(()=>{act(()=>root.unmount());host.remove();vi.useRealTimers()});
 
 it('places archive beside hamburger only when expanded; live wave cannot archive',async()=>{
  await render();
- const header=host.querySelector('header')!;
- expect(header.children[0]?.getAttribute('aria-label')).toBe('Collapse sessions sidebar');
- expect(header.children[1]?.getAttribute('aria-label')).toBe('Open wave archive');
+  const header=host.querySelector('header')!;
+  expect(header.children[0]?.getAttribute('aria-label')).toBe('Collapse sessions sidebar');
+  expect(header.children[1]?.getAttribute('aria-label')).toBe('Use dark mode');
+  expect(header.children[2]?.getAttribute('aria-label')).toBe('Open wave archive');
  const active=host.querySelector('[aria-label="Active task, live"]')!.parentElement!;
  expect([...active.querySelectorAll('button')].find(b=>b.textContent==='Archive')!.disabled).toBe(true);
  await render(true);expect(host.querySelector('[aria-label="Open wave archive"]')).toBeNull();
