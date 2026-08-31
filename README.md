@@ -15,13 +15,35 @@ request on its behalf.
 
     page  --postMessage-->  Papers preload  --IPC-->  Papers main  --loopback-->  delegate-wave
 
-`src/bridge/bridge.ts` restates that contract. The eleven operations it names are
+`src/bridge/bridge.ts` restates that contract. The thirteen operations it names are
 the complete surface: `overview`, `briefing`, `attention`, `job`, `propose`,
-`authorize`, `integration`, `approve`, `decline`. The page never holds a token,
+`authorize`, `integration`, `approve`, `decline`, `session.list`, `session.timeline`,
+`organization.get`, `organization.change`. The page never holds a token,
 a URL or an HTTP method, and its identity is attached by Papers from the page
 origin rather than sent from here.
 
 ## What belongs where
+
+### Wave organization
+
+The expanded sidebar has an archive box next to the hamburger and a plus button
+for custom groups. Use a wave's ellipsis menu to rename, archive, restore or delete
+an archived wave. Rename groups with the pencil; remove a custom group with ×
+(its waves return to their original Hermes groups). Drag a wave title onto a group,
+or use the menu's keyboard-accessible **Move to group** selector.
+
+Archive/delete cannot hide running or waiting work. Delete requires confirmation
+and permanently removes an archived wave from this organizer, **not** from the
+execution audit ledger or repository. Original tasks and Hermes ownership do not
+change when names or groups change. Organization is stored durably by DW and
+refreshed across windows, not kept only in browser storage.
+
+This feature requires the creator-approved organizer relay in Papers and DW schema
+38. Source changes alone do not update an already-running Papers installation.
+Do not build/deploy `public/` until the companion host/server update is available.
+Test results: 89/89 local tests; typecheck/build pass. Browser layout, archive and
+pointer/keyboard movement were checked using `test/organizer-preview.html` under
+the dev server. That fixture is sample-only and is not a production entry point.
 
 This project owns presentation, the entry of intent, the rendering of status and
 evidence, and the Integrate / Reject gestures. delegate-wave owns everything

@@ -464,6 +464,7 @@ function Request({ text, close }: { text: string; close: () => void }) {
   );
 }
 export function SessionTimeline({
+  displayName,
   timeline,
   onLoadEarlier,
   onBootstrapDiagnostic,
@@ -471,6 +472,7 @@ export function SessionTimeline({
   timeline: Timeline;
   onLoadEarlier: (s: ProcessSpan) => Promise<void>;
   onBootstrapDiagnostic?: (d: TimelineBootstrapDiagnostic) => void;
+  displayName?: string;
 }) {
   const [open, setOpen] = useState<Set<string>>(
       () =>
@@ -562,7 +564,7 @@ export function SessionTimeline({
     <section className="timeline-panel">
       <header className="timeline-header">
         <button className="session-title" onClick={() => setRequest(true)}>
-          <h1>{timeline.session.intent}</h1>
+          <h1>{displayName || timeline.session.intent}</h1>
         </button>
         <div className="session-context">
           {timeline.session.originHermesSessionTitle ?? "Hermes"} ·{" "}

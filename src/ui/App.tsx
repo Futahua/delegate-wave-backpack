@@ -1,7 +1,6 @@
 import {
   useCallback,
   useEffect,
-  useMemo,
   useRef,
   useState,
   type ComponentType,
@@ -14,6 +13,7 @@ import {
   paramsForSessionTimeline,
 } from "../model/adapter";
 import { SessionTimeline } from "../timeline/SessionTimeline";
+import { WaveOrganizer } from './WaveOrganizer';
 import {
   mergeStreamPage,
   mergeTimelineRefresh,
@@ -29,39 +29,7 @@ export const HIDDEN_LIST_POLL = 5_000;
 export const VISIBLE_TIMELINE_POLL = 900;
 export const HIDDEN_TIMELINE_POLL = 5_000;
 
-export interface SessionConversationGroup {
-  id: string;
-  label: string;
-  sessions: SessionSummary[];
-}
-const neutralConversationLabel = (newest: SessionSummary) =>
-  newest.originHermesSessionTitle?.trim() ||
-  `Hermes · ${new Date(newest.startedAt).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}`;
-export function buildSessionGroups(
-  sessions: SessionSummary[],
-): SessionConversationGroup[] {
-  const conversations = new Map<string, SessionSummary[]>();
-  for (const item of sessions) {
-    const identity = item.originHermesSessionId ?? `unlinked:${item.id}`;
-    conversations.set(identity, [...(conversations.get(identity) ?? []), item]);
-  }
-  return [...conversations]
-    .map(([id, items]) => {
-      const sorted = [...items].sort(
-        (a, b) => Date.parse(b.startedAt) - Date.parse(a.startedAt),
-      );
-      return {
-        id,
-        label: neutralConversationLabel(sorted[0]!),
-        sessions: sorted,
-      };
-    })
-    .sort(
-      (a, b) =>
-        Date.parse(b.sessions[0]!.startedAt) -
-        Date.parse(a.sessions[0]!.startedAt),
-    );
-}
+export {buildSessionGroups, type SessionConversationGroup} from './sessionGroups';
 
 const DEFAULT_SIDEBAR_WIDTH = 264,
   MIN_SIDEBAR_WIDTH = 200,
@@ -84,6 +52,7 @@ const savedSidebarCollapsed = () =>
 export function App(): React.JSX.Element {
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [selected, setSelected] = useState<string>();
+  const [selectedName, setSelectedName] = useState<string>();
   const [timeline, setTimeline] = useState<Timeline>();
   const [indexFreshness, setIndexFreshness] = useState<
     "fresh" | "stale" | "loading"
@@ -95,9 +64,6 @@ export function App(): React.JSX.Element {
   const [sidebarWidth, setSidebarWidth] = useState(savedSidebarWidth);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(
     savedSidebarCollapsed,
-  );
-  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(
-    () => new Set(),
   );
   const timelineRef = useRef<Timeline | undefined>(undefined);
   timelineRef.current = timeline;
@@ -143,11 +109,7 @@ export function App(): React.JSX.Element {
         const next = await loadSessionIndex();
         if (stopped) return;
         setSessions(next);
-        setSelected((current) =>
-          current && next.some((session) => session.id === current)
-            ? current
-            : next[0]?.id,
-        );
+        setSelected((current) => current && next.some((session) => session.id === current) ? current : undefined);
         setIndexFreshness("fresh");
         setMessage(
           next.length
@@ -276,7 +238,6 @@ export function App(): React.JSX.Element {
     [selected],
   );
 
-  const groups = useMemo(() => buildSessionGroups(sessions), [sessions]);
   const selectedTimeline =
     timeline?.session.id === selected ? timeline : undefined;
   const freshness = selectedTimeline ? timelineFreshness : indexFreshness;
@@ -347,92 +308,7 @@ export function App(): React.JSX.Element {
           <aside
             className={`session-sidebar${sidebarCollapsed ? " collapsed" : ""}`}
           >
-            <header className="session-nav-header">
-              <button
-                className="sidebar-toggle"
-                aria-label={
-                  sidebarCollapsed
-                    ? "Expand sessions sidebar"
-                    : "Collapse sessions sidebar"
-                }
-                title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-                onClick={toggleSidebar}
-              >
-                ☰
-              </button>
-            </header>
-            {!sidebarCollapsed && (
-              <div className="session-groups">
-                {groups.map((group) => {
-                  const collapsed = collapsedGroups.has(group.id);
-                  return (
-                    <section className="conversation-group" key={group.id}>
-                      <button
-                        className="conversation-toggle"
-                        aria-expanded={!collapsed}
-                        onClick={() =>
-                          setCollapsedGroups((current) => {
-                            const next = new Set(current);
-                            next.has(group.id)
-                              ? next.delete(group.id)
-                              : next.add(group.id);
-                            return next;
-                          })
-                        }
-                      >
-                        <b>{group.label}</b>
-                        <small>
-                          {group.sessions.length}{" "}
-                          {group.sessions.length === 1 ? "wave" : "waves"}
-                        </small>
-                      </button>
-                      {!collapsed &&
-                        group.sessions.map((item) => {
-                          const consequential = [
-                            "live",
-                            "waiting",
-                            "failed",
-                          ].includes(item.state);
-                          return (
-                            <button
-                              aria-label={`${item.intent}, ${item.state}, ${new Date(item.startedAt).toLocaleString()}`}
-                              className={`session-link${selected === item.id ? " selected" : ""}`}
-                              key={item.id}
-                              onClick={() => {
-                                setSelected(item.id);
-                                setTimeline(undefined);
-                              }}
-                            >
-                              <i className={`session-dot ${item.state}`} />
-                              <span>
-                                <b>{item.intent}</b>
-                                <small className="session-meta">
-                                  {new Date(item.startedAt).toLocaleString(
-                                    undefined,
-                                    {
-                                      month: "short",
-                                      day: "numeric",
-                                      hour: "2-digit",
-                                      minute: "2-digit",
-                                    },
-                                  )}
-                                </small>
-                              </span>
-                              {consequential && (
-                                <em
-                                  className={`session-consequential state-${item.state}`}
-                                >
-                                  {item.state}
-                                </em>
-                              )}
-                            </button>
-                          );
-                        })}
-                    </section>
-                  );
-                })}
-              </div>
-            )}
+            <WaveOrganizer sessions={sessions} selected={selected} collapsed={sidebarCollapsed} toggle={toggleSidebar} onSelect={(id,name) => {if(id!==selected)setTimeline(undefined);setSelected(id);setSelectedName(name)}} />
           </aside>
         </Pane>
         <Pane minSize={360}>
@@ -446,6 +322,7 @@ export function App(): React.JSX.Element {
                 </div>
                 <SessionTimeline
                   timeline={selectedTimeline}
+                  displayName={selectedName}
                   onLoadEarlier={loadEarlier}
                 />
               </>

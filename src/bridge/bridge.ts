@@ -9,12 +9,14 @@
  * token, and its identity is attached by the Papers preload from the page
  * origin — never sent from this file.
  *
- * The eleven operations below are the complete surface. If the interface needs a
+ * The thirteen operations below are the complete surface. If the interface needs a
  * truth these cannot express, that is a specific missing truth to raise as a
  * contract change, not a reason to widen anything here.
  */
 
 export type Operation =
+  | 'organization.get'
+  | 'organization.change'
   | 'overview'
   | 'briefing'
   | 'attention'

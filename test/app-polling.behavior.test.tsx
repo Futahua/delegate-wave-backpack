@@ -3,6 +3,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const relay = vi.hoisted(() => ({ read: vi.fn() }));
+vi.mock('../src/bridge/bridge',()=>({call:vi.fn(async()=>({ok:true,result:{groups:[],waves:[]}}))}));
 vi.mock('../src/model/adapter', async (load) => {
   const actual = await load<typeof import('../src/model/adapter')>();
   return { ...actual, read: relay.read };
