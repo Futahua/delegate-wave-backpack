@@ -887,13 +887,13 @@ table.evidence .msg {
 .feed-group{position:relative;grid-template-columns:52px minmax(0,1fr);gap:12px}
 .feed-group:after{content:"";position:absolute;left:41px;top:27px;bottom:-15px;width:1px;background:#d8ddd8}
 .feed-group:last-child:after{display:none}
-.feed-time{position:relative;width:auto;height:auto;padding-top:.75em;overflow:visible;clip-path:none;color:#7b8580;font:calc(8px * var(--feed-scale))/1.4 ui-monospace,monospace;text-align:right;white-space:nowrap}
+.feed-time{position:relative;width:auto;height:auto;padding-top:.62em;overflow:visible;clip-path:none;color:#717c76;font:calc(10px * var(--feed-scale))/1.4 ui-monospace,monospace;text-align:right;white-space:nowrap}
 .feed-processes{position:relative}
 .process-card{position:relative}
 .process-card.expanded{grid-column:1/-1!important;display:flex;flex-direction:column;height:auto;max-height:calc(100dvh - 150px);overflow:hidden}
 .process-header{grid-template-columns:auto minmax(0,1fr) auto;transition:background .14s ease}
 .process-header:hover,.process-header:focus-visible{background:#ffffff82;outline:none}
-.process-elapsed{color:#727c76;font:calc(9px * var(--feed-scale)) ui-monospace,monospace;white-space:nowrap}
+.process-elapsed{color:#68746d;font:calc(10px * var(--feed-scale))/1.35 ui-monospace,monospace;white-space:nowrap}
 .consequential-state{color:#55625b;font:700 calc(9px * var(--feed-scale)) ui-monospace,monospace;text-transform:uppercase}
 .state-live .consequential-state{color:#28764c}.state-failed .consequential-state{color:#a65049}.state-waiting .consequential-state{color:#856527}
 .process-scroll-viewport{min-height:0;max-height:min(60vh,680px);flex:0 1 auto;overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;scrollbar-gutter:stable}
