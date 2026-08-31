@@ -375,11 +375,13 @@ function Card({
     attention ||
     (span.state === "cancelled" && span.actor === "validator");
   const receipt = isValidatorReceipt(span);
+  const expanded = open && !receipt;
   useLayoutEffect(() => {
-    if (!open || !viewport.current) return;
+    if (!expanded || !viewport.current) return;
     const node = viewport.current;
     node.scrollTop = processFollowing ? node.scrollHeight : savedScrollTop.current;
-  }, [open, span.stream.length, processFollowing]);
+  }, [expanded, span.stream.length, processFollowing]);
+  const headerLabel = `${span.actor}, ${span.label}, ${span.state}, started ${new Date(span.startedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}${span.state === "live" ? "" : `, duration ${elapsed(span)}`}`;
   const returnToProcessLive = () => {
     const node = viewport.current;
     if (node) node.scrollTop = node.scrollHeight;
@@ -388,45 +390,36 @@ function Card({
   };
   return (
     <article
-      className={`process-card actor-${span.actor} state-${span.state}${receipt ? " validator-receipt" : ""}${open ? " expanded" : ""}`}
+      className={`process-card actor-${span.actor} state-${span.state}${receipt ? " validator-receipt" : ""}${expanded ? " expanded" : ""}`}
       data-testid={`process:${span.id}`}
-      style={{ gridColumn: open ? "1 / -1" : lane + 1 }}
+      style={{ gridColumn: expanded ? "1 / -1" : lane + 1 }}
     >
-      <button
-        className="process-header"
-        onClick={toggle}
-        aria-expanded={open}
-        aria-label={`${span.actor}, ${span.label}, ${span.state}, started ${new Date(span.startedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}${span.state === "live" ? "" : `, duration ${elapsed(span)}`}`}
-      >
-        <span className="role-chip">{span.actor}</span>
-        <b>
-          {receipt
-            ? validatorLabel(span)
-            : span.label.replace(/^(Manager|Worker|Validation)\s*[·:]?\s*/i, "") ||
-              span.label}
-        </b>
-        {consequential && (
-          <span className="consequential-state">
-            {span.state === "live"
-              ? "Live"
-              : span.state === "failed"
-                ? "Failed"
-                : span.state === "cancelled"
-                  ? "Cancelled"
-                  : "Needs input"}
-          </span>
-        )}
-        <span className="process-elapsed" aria-label={`Elapsed ${elapsed(span)}`}>
-          {elapsed(span)}
-        </span>
-      </button>
-      {attention && !open && (
+      {receipt ? (
+        <div className="process-header validation-receipt" aria-label={headerLabel}>
+          <span className="role-chip">{span.actor}</span>
+          <b className="receipt-command">{validatorCommand(span)}</b>
+          <span className="receipt-result">passed</span>
+          <span className="process-elapsed" aria-label={`Elapsed ${elapsed(span)}`}>{elapsed(span)}</span>
+        </div>
+      ) : (
+        <button className="process-header" onClick={toggle} aria-expanded={expanded} aria-label={headerLabel}>
+          <span className="role-chip">{span.actor}</span>
+          <b>{span.label.replace(/^(Manager|Worker|Validation)\s*[·:]?\s*/i, "") || span.label}</b>
+          {consequential && (
+            <span className="consequential-state">
+              {span.state === "live" ? "Live" : span.state === "failed" ? "Failed" : span.state === "cancelled" ? "Cancelled" : "Needs input"}
+            </span>
+          )}
+          <span className="process-elapsed" aria-label={`Elapsed ${elapsed(span)}`}>{elapsed(span)}</span>
+        </button>
+      )}
+      {attention && !expanded && (
         <div className="attention-summary">
           <b>Needs input</b>
           <span>Waiting for Hermes</span>
         </div>
       )}
-      {open ? (
+      {expanded ? (
         <div
           className="process-scroll-viewport"
           ref={viewport}
@@ -439,17 +432,12 @@ function Card({
         >
           <Stream span={span} loading={loading} loadEarlier={load} />
         </div>
-      ) : receipt ? (
-        <div className="validation-receipt">
-          <code className="receipt-command">{validatorCommand(span)}</code>
-          <span className="receipt-result">passed</span>
-        </div>
-      ) : (
+      ) : !receipt ? (
         <div className="compact-summary markdown-preview">
           <CompactPreview span={span} />
         </div>
-      )}
-      {open && span.state === "live" && !processFollowing && (
+      ) : null}
+      {expanded && span.state === "live" && !processFollowing && (
         <button className="process-return-live" onClick={returnToProcessLive}>
           ↓ Return to live
         </button>
