@@ -65,6 +65,13 @@ export function App(): React.JSX.Element {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(
     savedSidebarCollapsed,
   );
+  const [workspaceTheme, setWorkspaceTheme] = useState<"light" | "dark">(
+    () =>
+      globalThis.localStorage?.getItem("delegate-wave.workspace-theme") ===
+      "dark"
+        ? "dark"
+        : "light",
+  );
   const timelineRef = useRef<Timeline | undefined>(undefined);
   timelineRef.current = timeline;
 
@@ -281,8 +288,14 @@ export function App(): React.JSX.Element {
       localStorage.setItem("delegate-wave.sidebar-collapsed", String(next));
       return next;
     });
+  const toggleWorkspaceTheme = () =>
+    setWorkspaceTheme((current) => {
+      const next = current === "dark" ? "light" : "dark";
+      localStorage.setItem("delegate-wave.workspace-theme", next);
+      return next;
+    });
   return (
-    <div className="session-app">
+    <div className="session-app" data-theme={workspaceTheme}>
       <SplitPane
         direction="horizontal"
         className="session-split"
@@ -313,6 +326,21 @@ export function App(): React.JSX.Element {
         </Pane>
         <Pane minSize={360}>
           <main className="session-main">
+            <button
+              className="workspace-theme-toggle"
+              type="button"
+              aria-label={
+                workspaceTheme === "dark" ? "Use light mode" : "Use dark mode"
+              }
+              title={
+                workspaceTheme === "dark" ? "Use light mode" : "Use dark mode"
+              }
+              aria-pressed={workspaceTheme === "dark"}
+              onClick={toggleWorkspaceTheme}
+            >
+              <span aria-hidden="true">{workspaceTheme === "dark" ? "☼" : "☾"}</span>
+              <span>{workspaceTheme === "dark" ? "Light" : "Dark"}</span>
+            </button>
             {selectedTimeline ? (
               <>
                 <div className={`freshness freshness-${freshness}`}>

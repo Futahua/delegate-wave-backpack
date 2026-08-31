@@ -38,10 +38,18 @@ execution audit ledger or repository. Original tasks and Hermes ownership do not
 change when names or groups change. Organization is stored durably by DW and
 refreshed across windows, not kept only in browser storage.
 
+### Workspace theme
+
+Use the **Dark / Light** button in the upper-right of the main workspace to
+switch the timeline board between a warm paper palette and a low-glare dark
+palette. Manager, worker and validator cards keep distinct, readable colors in
+both modes. The navigation rail stays dark, and the choice is saved locally so
+it remains when the Backpack is reopened.
+
 This feature requires the creator-approved organizer relay in Papers and DW schema
 38. Source changes alone do not update an already-running Papers installation.
 Do not build/deploy `public/` until the companion host/server update is available.
-Test results: 89/89 local tests; typecheck/build pass. Browser layout, archive and
+Test results: 90/90 local tests; typecheck/build pass. Browser layout, archive and
 pointer/keyboard movement were checked using `test/organizer-preview.html` under
 the dev server. That fixture is sample-only and is not a production entry point.
 

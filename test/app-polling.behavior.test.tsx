@@ -49,4 +49,29 @@ describe('App polling mechanics', () => {
     expect(host.textContent).toContain('Offline · showing last confirmed revision');
     expect(host.querySelector('.session-sidebar footer')).toBeNull();
   });
+
+  it('toggles the main workspace theme and remembers it locally', async () => {
+    relay.read.mockImplementation(async (operation: string) =>
+      operation === 'session.list' ? listReply : timelineReply('theme-r1'));
+    await act(async () => root.render(<App />));
+    await tick();
+    const app = host.querySelector('.session-app')!;
+    const toggle = host.querySelector<HTMLButtonElement>(
+      '[aria-label="Use dark mode"]',
+    );
+    expect(toggle).toBeTruthy();
+    expect(app.getAttribute('data-theme')).toBe('light');
+    await act(async () => toggle!.click());
+    expect(app.getAttribute('data-theme')).toBe('dark');
+    expect(localStorage.getItem('delegate-wave.workspace-theme')).toBe('dark');
+    expect(
+      host.querySelector('[aria-label="Use light mode"]'),
+    ).toBeTruthy();
+    await act(async () =>
+      host
+        .querySelector<HTMLButtonElement>('[aria-label="Use light mode"]')!
+        .click(),
+    );
+    expect(app.getAttribute('data-theme')).toBe('light');
+  });
 });
