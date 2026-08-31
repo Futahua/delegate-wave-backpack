@@ -369,9 +369,8 @@ function Card({
             {span.state === "live" ? "Live" : span.state === "failed" ? "Failed" : "Needs input"}
           </span>
         )}
-        <span className="process-meta" aria-hidden="true">
-          {new Date(span.startedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-          {span.state === "live" ? "" : ` · ${elapsed(span)}`}
+        <span className="process-elapsed" aria-label={`Elapsed ${elapsed(span)}`}>
+          {elapsed(span)}
         </span>
       </button>
       {attention && !open && (
