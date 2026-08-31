@@ -120,13 +120,14 @@ const elapsed = (s: ProcessSpan, now = Date.now()) => {
 };
 const last = (a: StreamItem[], p: (i: StreamItem) => boolean) =>
   [...a].reverse().find(p);
-export const processSummary = (s: ProcessSpan) => {
-  const i =
+const summaryItem = (s: ProcessSpan) =>
     last(s.stream, (x) => x.lifecycle === "failed") ??
     last(s.stream, (x) => x.kind === "question") ??
     last(s.stream, (x) => x.authority === "evidence") ??
     last(s.stream, (x) => x.kind === "narration") ??
     s.stream.at(-1);
+export const processSummary = (s: ProcessSpan) => {
+  const i = summaryItem(s);
   return i
     ? i.kind === "narration"
       ? (i.text ?? i.title)
@@ -153,6 +154,15 @@ const running = (i: StreamItem) =>
   i.lifecycle === "started" || i.lifecycle === "updated";
 function ActionLabel({ children }: { children: string }) {
   return <>{children.split(/\b(Read|Search|Searched|Edit|Edited|Run|Ran|Update|Updated)\b/g).map((part, index) => /^(Read|Search|Searched|Edit|Edited|Run|Ran|Update|Updated)$/.test(part) ? <strong key={index}>{part}</strong> : part)}</>;
+}
+function CompactPreview({ span }: { span: ProcessSpan }) {
+  const item = summaryItem(span);
+  const preview = processPreview(span);
+  return item && item.kind !== "narration" ? (
+    <ActionLabel>{preview}</ActionLabel>
+  ) : (
+    <ReactMarkdown remarkPlugins={[remarkGfm]}>{preview}</ReactMarkdown>
+  );
 }
 function Tool({
   item,
@@ -397,7 +407,7 @@ function Card({
         </div>
       ) : (
         <div className="compact-summary markdown-preview">
-          <ReactMarkdown remarkPlugins={[remarkGfm]}>{processPreview(span)}</ReactMarkdown>
+          <CompactPreview span={span} />
         </div>
       )}
       {open && span.state === "live" && !processFollowing && (
