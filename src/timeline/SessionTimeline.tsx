@@ -341,11 +341,7 @@ function Card({
             span.label}
         </b>
         <time>
-          {new Date(span.startedAt).toLocaleTimeString([], {
-            hour: "2-digit",
-            minute: "2-digit",
-          })}{" "}
-          · {span.state === "live" ? "LIVE" : elapsed(span)}
+          {span.state === "live" ? "LIVE" : elapsed(span)}
         </time>
         <span>{open ? "⌄" : "›"}</span>
       </button>
@@ -453,11 +449,7 @@ export function SessionTimeline({
       });
     }
   };
-  const started = new Date(timeline.session.startedAt),
-    end = timeline.session.settledAt
-      ? Date.parse(timeline.session.settledAt)
-      : clock,
-    total = Math.max(0, end - started.getTime());
+  const started = new Date(timeline.session.startedAt);
   return (
     <section className="timeline-panel">
       <header className="timeline-header">
@@ -472,10 +464,6 @@ export function SessionTimeline({
             day: "numeric",
           })}
         </div>
-        <span className={`session-state state-${timeline.session.state}`}>
-          {timeline.session.state} · {Math.floor(total / 60000)}m{" "}
-          {String(Math.round(total / 1000) % 60).padStart(2, "0")}s
-        </span>
       </header>
       <div className="timeline-list-host" ref={host}>
         <div
@@ -515,7 +503,6 @@ export function SessionTimeline({
                   hour: "2-digit",
                   minute: "2-digit",
                 })}
-                {g.laneCount > 1 && <span>parallel work</span>}
               </div>
               <div
                 className="feed-processes"
@@ -541,11 +528,6 @@ export function SessionTimeline({
               </div>
             </section>
           ))}
-          <div className="latest-rule">
-            <span>
-              {timeline.session.state === "settled" ? "FINISHED" : "LIVE"}
-            </span>
-          </div>
         </div>
       </div>
       {!following && (

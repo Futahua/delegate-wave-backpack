@@ -45,7 +45,7 @@ describe('App polling mechanics', () => {
     expect(host.querySelector('[data-testid="timeline"]')?.textContent).toBe('confirmed-r1');
     await tick(VISIBLE_TIMELINE_POLL);
     expect(host.querySelector('[data-testid="timeline"]')?.textContent).toBe('confirmed-r1');
-    expect(host.textContent).toContain('Offline · last confirmed');
     expect(host.textContent).toContain('Offline · showing last confirmed revision');
+    expect(host.querySelector('.session-sidebar footer')).toBeNull();
   });
 });
