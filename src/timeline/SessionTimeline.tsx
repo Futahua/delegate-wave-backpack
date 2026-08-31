@@ -24,8 +24,7 @@ export interface TimelineBootstrapDiagnostic {
   listLoaded: boolean;
   renderedItems: number;
 }
-export const TEXT_RENDER_IMMEDIATE = 512,
-  TEXT_RENDER_PACE_MS = 24;
+export const TEXT_RENDER_PACE_MS = 16;
 const step = (n: number) =>
   n <= 12 ? 2 : n <= 48 ? 4 : n <= 96 ? 8 : Math.min(256, Math.ceil(n / 4));
 export function nextPacedText(t: string, s: number) {
@@ -36,10 +35,10 @@ export function nextPacedText(t: string, s: number) {
   return t.slice(0, e);
 }
 function usePacedText(value: string, active: boolean) {
-  const [shown, setShown] = useState(value),
-    ref = useRef(value),
+  const [shown, setShown] = useState(() => active ? "" : value),
+    ref = useRef(active ? "" : value),
     target = useRef(value),
-    timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+    frame = useRef<number | undefined>(undefined);
   ref.current = shown;
   useEffect(() => {
     target.current = value;
@@ -47,28 +46,26 @@ function usePacedText(value: string, active: boolean) {
       ref.current = v;
       setShown(v);
     };
-    if (
-      !active ||
-      !value.startsWith(ref.current) ||
-      value.length - ref.current.length <= 512
-    ) {
-      if (timer.current) clearTimeout(timer.current);
+    if (!active || !value.startsWith(ref.current)) {
+      if (frame.current !== undefined) cancelAnimationFrame(frame.current);
       sync(value);
       return;
     }
-    const run = () => {
-      const v = target.current,
-        c = ref.current;
-      if (!active || !v.startsWith(c) || v.length - c.length <= 512) {
+    let position = ref.current.length;
+    const reveal = () => {
+      const v = target.current;
+      if (!active || !v.startsWith(ref.current)) {
         sync(v);
         return;
       }
-      sync(nextPacedText(v, c.length));
-      timer.current = setTimeout(run, 24);
+      position = Math.min(v.length, position + Math.max(1, Math.ceil((v.length - position) / 10)));
+      sync(v.slice(0, position));
+      if (position < v.length) frame.current = requestAnimationFrame(reveal);
+      else frame.current = undefined;
     };
-    timer.current = setTimeout(run, 24);
+    frame.current = requestAnimationFrame(reveal);
     return () => {
-      if (timer.current) clearTimeout(timer.current);
+      if (frame.current !== undefined) cancelAnimationFrame(frame.current);
     };
   }, [value, active]);
   return shown;
@@ -144,7 +141,7 @@ function Narration({ item, live }: { item: StreamItem; live: boolean }) {
     live && item.lifecycle !== "completed",
   );
   return (
-    <div className="agent-prose" data-testid={`narration:${item.id}`}>
+    <div className={`agent-prose${live && item.lifecycle !== "completed" ? " active-narration" : ""}`} data-testid={`narration:${item.id}`}>
       <ReactMarkdown remarkPlugins={[remarkGfm]}>{text}</ReactMarkdown>
       {item.truncated && <small>Public text truncated.</small>}
     </div>
