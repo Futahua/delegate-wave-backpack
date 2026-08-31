@@ -17,6 +17,7 @@
 import { call, type Operation } from '../bridge/bridge';
 
 export const READ_TIMEOUT_MS = 6_000;
+export const READ_RETRY_TIMEOUT_MS = 3_000;
 export const WRITE_TIMEOUT_MS = 20_000;
 
 export function paramsForStart(intent: string): Record<string, unknown> {
@@ -69,7 +70,13 @@ export function paramsForDecline(proposalId: string, reason?: string): Record<st
 }
 
 export async function read(operation: Operation, params: Record<string, unknown> = {}): Promise<import('../bridge/bridge').RelayResult<unknown>> {
-  return call<unknown>(operation, params, { timeoutMs: READ_TIMEOUT_MS });
+  const first = await call<unknown>(operation, params, { timeoutMs: READ_TIMEOUT_MS });
+  if (first.code !== 'TIMEOUT') return first;
+  // Reads are idempotent. A fresh request closes the narrow startup race where
+  // Papers replaces the project webview while its first postMessage is in flight.
+  // Mutations deliberately do not use this path: an unanswered mutation may
+  // already have run and must never be repeated automatically.
+  return call<unknown>(operation, params, { timeoutMs: READ_RETRY_TIMEOUT_MS });
 }
 
 export async function write(operation: Operation, params: Record<string, unknown> = {}): Promise<import('../bridge/bridge').RelayResult<unknown>> {
