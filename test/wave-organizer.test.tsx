@@ -42,7 +42,7 @@ it('places archive beside hamburger only when expanded; live wave cannot archive
   expect(header.children[2]?.getAttribute('aria-label')).toBe('Open wave archive');
  const active=host.querySelector('[aria-label="Active task, live"]')!.parentElement!;
  expect([...active.querySelectorAll('button')].find(b=>b.textContent==='Archive')!.disabled).toBe(true);
- await render(true);expect(host.querySelector('[aria-label="Open wave archive"]')).toBeNull();
+ await render(true);expect(host.querySelector('[aria-label="Open wave archive"]')).toBeNull();expect(host.querySelector('[aria-label="Use dark mode"]')).toBeNull();
 });
 
 it('archives, restores and deletes only after explicit confirmation; survives remount',async()=>{
