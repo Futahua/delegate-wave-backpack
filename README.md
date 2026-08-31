@@ -32,9 +32,30 @@ would create a second, weaker copy of rules that already exist.
 ## Commands
 
     npm install
-    npm run build      # tsc --noEmit && vite build -> public/
+    npm run build          # typecheck + production bundle proof -> .verify-dist/
+    npm run build:public   # refresh the Papers-served public/
     npm test
     npm run typecheck
 
 Papers displays `public/index.html`, named by `project.json`. `public/` is build
 output; the source of truth is `src/`.
+
+## Verification and deployment are separate
+
+`public/` is generated build output that is also the live runtime surface: Papers
+serves that subtree directly and rereads it when the Backpack is entered, so
+whatever is committed there is what the creator sees.
+
+That makes one command unable to do both jobs. `npm run build` proves the source
+typechecks and bundles, writing to an ignored `.verify-dist/`, so validation can
+run on every candidate without touching the served assets -- and
+`git diff --exit-code -- public` afterwards is a real check rather than a
+contradiction. `npm run build:public` is the deliberate act of regenerating what
+Papers serves.
+
+A source change is not visible in Papers until `public/` is regenerated. Keep
+that regeneration in its own commit: the bundle is content-hashed, so a rebuild
+rewrites hundreds of asset filenames and would bury a reviewable source change.
+Papers rereads the files rather than requiring a rebuild or restart, but an
+already-open Backpack frame still holds the old bundle -- re-enter or reload it
+to see the new surface.
