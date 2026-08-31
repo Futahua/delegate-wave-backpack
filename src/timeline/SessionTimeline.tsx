@@ -25,6 +25,7 @@ export interface TimelineBootstrapDiagnostic {
   renderedItems: number;
 }
 export const TEXT_RENDER_PACE_MS = 16;
+export const TEXT_RENDER_CHARS_PER_SECOND = 72;
 const step = (n: number) =>
   n <= 12 ? 2 : n <= 48 ? 4 : n <= 96 ? 8 : Math.min(256, Math.ceil(n / 4));
 export function nextPacedText(t: string, s: number) {
@@ -52,14 +53,23 @@ function usePacedText(value: string, active: boolean) {
       return;
     }
     let position = ref.current.length;
-    const reveal = () => {
+    let lastFrame: number | undefined;
+    let characterBudget = 0;
+    const reveal = (now: number) => {
       const v = target.current;
       if (!active || !v.startsWith(ref.current)) {
         sync(v);
         return;
       }
-      position = Math.min(v.length, position + Math.max(1, Math.ceil((v.length - position) / 10)));
-      sync(v.slice(0, position));
+      const elapsed = lastFrame === undefined ? TEXT_RENDER_PACE_MS : Math.max(0, now - lastFrame);
+      lastFrame = now;
+      characterBudget += elapsed * TEXT_RENDER_CHARS_PER_SECOND / 1000;
+      const count = Math.floor(characterBudget);
+      if (count > 0) {
+        characterBudget -= count;
+        position = Math.min(v.length, position + count);
+        sync(v.slice(0, position));
+      }
       if (position < v.length) frame.current = requestAnimationFrame(reveal);
       else frame.current = undefined;
     };
@@ -138,10 +148,10 @@ export const processPreview = (s: ProcessSpan) => {
 function Narration({ item, live }: { item: StreamItem; live: boolean }) {
   const text = usePacedText(
     item.text ?? item.title,
-    live && item.lifecycle !== "completed",
+    live,
   );
   return (
-    <div className={`agent-prose${live && item.lifecycle !== "completed" ? " active-narration" : ""}`} data-testid={`narration:${item.id}`}>
+    <div className={`agent-prose${live ? " active-narration" : ""}`} data-testid={`narration:${item.id}`}>
       <ReactMarkdown remarkPlugins={[remarkGfm]}>{text}</ReactMarkdown>
       {item.truncated && <small>Public text truncated.</small>}
     </div>
@@ -286,6 +296,7 @@ function Stream({
   loading: boolean;
   loadEarlier: () => void;
 }) {
+  const newestNarration = [...span.stream].reverse().find((item) => item.kind === "narration")?.id;
   return (
     <div className="agent-turn-stream" data-testid={`stream:${span.id}`}>
       {span.streamBounds.hasEarlier && (
@@ -312,7 +323,7 @@ function Stream({
             </div>
           </details>
         ) : (
-          <Item key={p.item.id} item={p.item} live={span.state === "live"} />
+          <Item key={p.item.id} item={p.item} live={span.state === "live" && p.item.id === newestNarration} />
         ),
       )}
       {!span.stream.length && (
