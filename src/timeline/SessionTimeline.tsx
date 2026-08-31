@@ -588,7 +588,6 @@ export function SessionTimeline({
                 className="feed-processes"
                 style={{ "--lane-count": g.laneCount } as React.CSSProperties}
               >
-                {g.laneCount > 1 && <span className="parallel-label">Parallel work</span>}
                 {g.processes.map(({ process: s, lane }) => (
                   <Card
                     key={s.id}
