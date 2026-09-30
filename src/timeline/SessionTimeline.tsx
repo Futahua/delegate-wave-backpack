@@ -24,62 +24,6 @@ export interface TimelineBootstrapDiagnostic {
   listLoaded: boolean;
   renderedItems: number;
 }
-export const TEXT_RENDER_PACE_MS = 16;
-export const TEXT_RENDER_CHARS_PER_SECOND = 72;
-const step = (n: number) =>
-  n <= 12 ? 2 : n <= 48 ? 4 : n <= 96 ? 8 : Math.min(256, Math.ceil(n / 4));
-export function nextPacedText(t: string, s: number) {
-  const e = Math.min(t.length, s + step(t.length - s)),
-    m = Math.min(t.length, e + 8);
-  for (let i = e; i < m; i++)
-    if (/[\s.,!?;:)\]]/.test(t[i] ?? "")) return t.slice(0, i + 1);
-  return t.slice(0, e);
-}
-function usePacedText(value: string, active: boolean) {
-  const [shown, setShown] = useState(() => active ? "" : value),
-    ref = useRef(active ? "" : value),
-    target = useRef(value),
-    frame = useRef<number | undefined>(undefined);
-  ref.current = shown;
-  useEffect(() => {
-    target.current = value;
-    const sync = (v: string) => {
-      ref.current = v;
-      setShown(v);
-    };
-    if (!active || !value.startsWith(ref.current)) {
-      if (frame.current !== undefined) cancelAnimationFrame(frame.current);
-      sync(value);
-      return;
-    }
-    let position = ref.current.length;
-    let lastFrame: number | undefined;
-    let characterBudget = 0;
-    const reveal = (now: number) => {
-      const v = target.current;
-      if (!active || !v.startsWith(ref.current)) {
-        sync(v);
-        return;
-      }
-      const elapsed = lastFrame === undefined ? TEXT_RENDER_PACE_MS : Math.max(0, now - lastFrame);
-      lastFrame = now;
-      characterBudget += elapsed * TEXT_RENDER_CHARS_PER_SECOND / 1000;
-      const count = Math.floor(characterBudget);
-      if (count > 0) {
-        characterBudget -= count;
-        position = Math.min(v.length, position + count);
-        sync(v.slice(0, position));
-      }
-      if (position < v.length) frame.current = requestAnimationFrame(reveal);
-      else frame.current = undefined;
-    };
-    frame.current = requestAnimationFrame(reveal);
-    return () => {
-      if (frame.current !== undefined) cancelAnimationFrame(frame.current);
-    };
-  }, [value, active]);
-  return shown;
-}
 const compact = (v = "") =>
   v
     .replace(/<[^>]+>/g, " ")
@@ -159,10 +103,7 @@ const validatorCommand = (s: ProcessSpan) => {
   return item ? semanticToolLabel(item) : processSummary(s);
 };
 function Narration({ item, live }: { item: StreamItem; live: boolean }) {
-  const text = usePacedText(
-    item.text ?? item.title,
-    live,
-  );
+  const text = item.text ?? item.title;
   return (
     <div className={`agent-prose${live ? " active-narration" : ""}`} data-testid={`narration:${item.id}`}>
       <ReactMarkdown remarkPlugins={[remarkGfm]}>{text}</ReactMarkdown>
