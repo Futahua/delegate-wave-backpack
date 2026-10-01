@@ -59,7 +59,7 @@ export function WaveOrganizer({sessions, selected, onSelect, collapsed, toggle, 
   const groups=new Map(defaults.map(g=>[g.id,{id:g.id,label:g.label,sessions:[] as SessionSummary[]}]));
   for(const g of org.groups)groups.set(g.id,{id:g.id,label:g.name,sessions:[]});
   for(const s of sessions){const w=info.get(s.id);if(w?.deleted_at || Boolean(w?.archived_at)!==archive)continue;
-    const id=w?.group_id??s.originHermesSessionId??`unlinked:${s.id}`;
+    const id=w?.group_id??(s.source==='chatgpt_local'?'chatgpt-local':s.originHermesSessionId)??`unlinked:${s.id}`;
     groups.get(id)?.sessions.push(s);
   }
   const destination=[...groups.values()];
@@ -94,7 +94,7 @@ export function WaveOrganizer({sessions, selected, onSelect, collapsed, toggle, 
           <details className="wave-actions"><summary aria-label={`Actions for ${label}`}>⋯</summary><div>
             <button disabled={!ready||busy} onClick={()=>setEditing({action:'rename',sessionId:s.id,name:label})}>Rename</button>
             {archive?<><button disabled={busy} onClick={()=>void change({action:'restore',sessionId:s.id})}>Restore</button><button disabled={busy} onClick={()=>setDeleting(s.id)}>Delete</button></>:<button disabled={!ready||busy||s.state!=='settled'} onClick={()=>void change({action:'archive',sessionId:s.id})}>Archive</button>}
-            <label>Move to group<select aria-label={`Move ${label} to group`} disabled={!ready||busy} value={w?.group_id??''} onChange={e=>void change({action:'move',sessionId:s.id,groupId:e.target.value||null})}><option value="">Original Hermes group</option>{destination.filter(d=>!d.id.startsWith('unlinked:')).map(d=><option key={d.id} value={d.id}>{d.label}</option>)}</select></label>
+            <label>Move to group<select aria-label={`Move ${label} to group`} disabled={!ready||busy} value={w?.group_id??''} onChange={e=>void change({action:'move',sessionId:s.id,groupId:e.target.value||null})}><option value="">{s.source==='chatgpt_local'?'ChatGPT Local':'Original Hermes group'}</option>{destination.filter(d=>!d.id.startsWith('unlinked:')).map(d=><option key={d.id} value={d.id}>{d.label}</option>)}</select></label>
           </div></details>
         </div>})}
       </section>)}

@@ -292,6 +292,7 @@ function Stream({
 }
 function Card({
   span,
+  localChatGpt,
   lane,
   open,
   toggle,
@@ -299,6 +300,7 @@ function Card({
   load,
 }: {
   span: ProcessSpan;
+  localChatGpt: boolean;
   lane: number;
   open: boolean;
   toggle: () => void;
@@ -308,12 +310,13 @@ function Card({
   const viewport = useRef<HTMLDivElement>(null);
   const savedScrollTop = useRef(0);
   const [processFollowing, setProcessFollowing] = useState(true);
-  const attention =
-    span.state === "waiting" || span.stream.some((i) => i.kind === "question");
+  const hasQuestion = span.stream.some((i) => i.kind === "question");
+  const attention = hasQuestion || (span.state === "waiting" && !localChatGpt);
   const consequential =
     span.state === "live" ||
     span.state === "failed" ||
     attention ||
+    (localChatGpt && span.state === "waiting") ||
     (span.state === "cancelled" && span.actor === "validator");
   const receipt = isValidatorReceipt(span);
   const expanded = open && !receipt;
@@ -337,18 +340,18 @@ function Card({
     >
       {receipt ? (
         <div className="process-header validation-receipt" aria-label={headerLabel}>
-          <span className="role-chip">{span.actor}</span>
+          <span className="role-chip">{span.actor === "chatgpt" ? "local gpt" : span.actor}</span>
           <b className="receipt-command">{validatorCommand(span)}</b>
           <span className="receipt-result">passed</span>
           <span className="process-elapsed" aria-label={`Elapsed ${elapsed(span)}`}>{elapsed(span)}</span>
         </div>
       ) : (
         <button className="process-header" onClick={toggle} aria-expanded={expanded} aria-label={headerLabel}>
-          <span className="role-chip">{span.actor}</span>
+          <span className="role-chip">{span.actor === "chatgpt" ? "local gpt" : span.actor}</span>
           <b>{span.label.replace(/^(Manager|Worker|Validation)\s*[·:]?\s*/i, "") || span.label}</b>
           {consequential && (
             <span className="consequential-state">
-              {span.state === "live" ? "Live" : span.state === "failed" ? "Failed" : span.state === "cancelled" ? "Cancelled" : "Needs input"}
+              {span.state === "live" ? "Live" : span.state === "failed" ? "Failed" : span.state === "cancelled" ? "Cancelled" : localChatGpt ? "Idle" : "Needs input"}
             </span>
           )}
           <span className="process-elapsed" aria-label={`Elapsed ${elapsed(span)}`}>{elapsed(span)}</span>
@@ -357,7 +360,7 @@ function Card({
       {attention && !expanded && (
         <div className="attention-summary">
           <b>Needs input</b>
-          <span>Waiting for Hermes</span>
+          <span>{hasQuestion ? "A response is required" : "Waiting for Hermes"}</span>
         </div>
       )}
       {expanded ? (
@@ -455,9 +458,24 @@ export function SessionTimeline({
       setUpdates((n) => n + 1);
     rev.current = timeline.revision;
   }, [timeline.revision, following]);
+  const localChatGpt = timeline.session.source === "chatgpt_local" || timeline.session.mode === "CHATGPT_LOCAL";
   const groups = useMemo(
-    () => buildFeedGroups(timeline.spans, clock),
-    [timeline.spans, clock],
+    () => localChatGpt
+      ? [...timeline.spans]
+          .sort((a, b) => Date.parse(a.startedAt) - Date.parse(b.startedAt) || a.id.localeCompare(b.id))
+          .map((process) => {
+            const start = Date.parse(process.startedAt);
+            const end = process.finishedAt ? Date.parse(process.finishedAt) : clock;
+            return {
+              id: `feed:${process.id}`,
+              start,
+              end,
+              laneCount: 1,
+              processes: [{ process, lane: 0 }],
+            };
+          })
+      : buildFeedGroups(timeline.spans, clock),
+    [timeline.spans, clock, localChatGpt],
   );
   useLayoutEffect(() => {
     if (following && list.current)
@@ -508,7 +526,7 @@ export function SessionTimeline({
           <h1>{displayName || timeline.session.intent}</h1>
         </button>
         <div className="session-context">
-          {timeline.session.originHermesSessionTitle ?? "Hermes"} ·{" "}
+          {timeline.session.sourceTitle ?? timeline.session.originHermesSessionTitle ?? "Hermes"} ·{" "}
           {started.toLocaleDateString(undefined, {
             month: "short",
             day: "numeric",
@@ -562,6 +580,7 @@ export function SessionTimeline({
                   <Card
                     key={s.id}
                     span={s}
+                    localChatGpt={localChatGpt}
                     lane={lane}
                     open={open.has(s.id)}
                     toggle={() => toggleProcess(s.id)}

@@ -1010,3 +1010,12 @@ table.evidence .msg {
 .session-app[data-theme="dark"] .process-card.validator-receipt .role-chip{background:#b5985833;color:#efd895}
 .session-nav-header .workspace-theme-toggle{position:static;z-index:auto;width:30px;height:30px;box-sizing:border-box;padding:0;border-radius:6px;box-shadow:none;flex:none}
 .session-nav-header .workspace-theme-toggle>span:first-child{font-size:16px;line-height:1}
+
+/* ChatGPT Local is a first-class source, not a Hermes manager process. */
+.process-card.actor-chatgpt{border-color:#75a899;background:#eef8f4}
+.process-card.actor-chatgpt .process-header b{color:#2f6d60}
+.process-card.actor-chatgpt .role-chip{color:#2f6d60}
+.session-app[data-theme="dark"] .process-card.actor-chatgpt{border-color:#5f9c89;background:#162a25}
+.session-app[data-theme="dark"] .process-card.actor-chatgpt .process-header b,
+.session-app[data-theme="dark"] .process-card.actor-chatgpt .role-chip{color:#8fd7c2}
+.coordination-feed{overflow-x:hidden}

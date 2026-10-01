@@ -6,10 +6,10 @@ export interface ToolMetadata { exitCode?:number; changedFiles?:string[]; diff?:
 export interface StructuredTool { name:string; input?:ToolInput; output?:string; error?:string; truncated?:boolean; metadata?:ToolMetadata }
 export interface StreamItem { id:string; kind:StreamKind; lifecycle:'started'|'updated'|'completed'|'failed'; title:string; text?:string; detail?:string; truncated?:boolean; tool?:StructuredTool; occurredAt:string; authority:'activity'|'evidence' }
 export interface StreamBounds { complete:boolean; hasEarlier:boolean; cursor?:string }
-export interface ProcessSpan { id:string; parentId?:string; actor:'manager'|'worker'|'validator'; label:string; state:'live'|'waiting'|'completed'|'failed'|'cancelled'; startedAt:string; finishedAt?:string; stream:StreamItem[]; streamBounds:StreamBounds }
+export interface ProcessSpan { id:string; parentId?:string; actor:'manager'|'worker'|'validator'|'chatgpt'; label:string; state:'live'|'waiting'|'completed'|'failed'|'cancelled'; startedAt:string; finishedAt?:string; stream:StreamItem[]; streamBounds:StreamBounds }
 export interface ProcessBundle extends ProcessSpan { bundle:true; processes:ProcessSpan[] }
 export type TimelineProcess = ProcessSpan | ProcessBundle;
-export interface SessionSummary { id:string; rootJobId?:string; intent:string; mode:string; state:'live'|'waiting'|'settled'; originHermesSessionId?:string; originHermesSessionTitle?:string; startedAt:string; settledAt?:string; updatedAt:string }
+export interface SessionSummary { id:string; rootJobId?:string; intent:string; mode:string; source?:string; sourceTitle?:string; state:'live'|'waiting'|'settled'; originHermesSessionId?:string; originHermesSessionTitle?:string; startedAt:string; settledAt?:string; updatedAt:string }
 export interface SessionPage { sessions:SessionSummary[]; hasMore:boolean; nextCursor?:string }
 export interface SessionTimeline { session:SessionSummary; spans:ProcessSpan[]; revision:string; streamPageFor?:string }
 const str=(r:Record<string,unknown>,k:string):string|undefined=>typeof r[k]==='string'?r[k] as string:undefined;
@@ -18,7 +18,7 @@ function session(raw: unknown): SessionSummary | undefined {
   if (!isRecord(raw)) return;
   const id=str(raw,'id'),intent=str(raw,'intent'),state=str(raw,'state'),startedAt=str(raw,'started_at');
   if(!id||!intent||!startedAt||!['live','waiting','settled'].includes(state??''))return;
-  return { id,intent,mode:str(raw,'mode')??'UNKNOWN',state:state as SessionSummary['state'],startedAt,
+  return { id,intent,mode:str(raw,'mode')??'UNKNOWN',source:str(raw,'source'),sourceTitle:str(raw,'source_title'),state:state as SessionSummary['state'],startedAt,
     updatedAt:str(raw,'updated_at')??startedAt,rootJobId:str(raw,'root_job_id'),
     originHermesSessionId:str(raw,'origin_hermes_session_id'),originHermesSessionTitle:str(raw,'origin_hermes_session_title'),settledAt:str(raw,'settled_at') };
 }
