@@ -121,7 +121,7 @@ export function App(): React.JSX.Element {
         setMessage(
           next.length
             ? ""
-            : "No autonomous sessions have been recorded yet. Delegate through Hermes to begin.",
+            : "No autonomous sessions have been recorded yet. Start a session to begin.",
         );
       } catch (error) {
         if (!stopped) {

@@ -6,7 +6,6 @@
 | --- | --- | --- |
 | Whole canvas | Creator's original coordination-board sketch | Time runs downward; overlap branches horizontally; settled and live remain one durable object. |
 | Time rail and interval blocks | Linear Timeline | Quiet ruler, proportional gaps and restrained labels. No planning fields or draggable scheduling. |
-| Session rail | Cursor 3 Agents Window | Human task hierarchy first. Technical Hermes/session IDs live in inspect text only. |
 | Masthead | Codex app | Compact thread chrome; request collapsed by default; status and elapsed time stay quiet. |
 | Live stream | OpenCode `message-part.tsx` / `basic-tool.tsx` at `10765ff2` | Prose is prose; semantic tool rows; running state is limited to changing content; exact detail is disclosed. |
 | Settled disclosure and scroll | T3 Code timeline sources at `2daff8c` | Calm compaction, stable inline expansion, strict history-reading/follow modes. Native DOM remains the scroll owner. |

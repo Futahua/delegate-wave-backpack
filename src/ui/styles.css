@@ -821,7 +821,7 @@ table.evidence .msg {
 .wave-organizer [draggable=true]{cursor:grab}
 .wave-organizer button:focus-visible,.wave-actions summary:focus-visible{outline:2px solid #a7d2ba}
 .archive-toggle[aria-pressed=true]{background:#35423e;color:#fff}
-/* Narrow v3 corrections: Hermes groups and interval-unfold disclosure. */
+
 .conversation-group{margin:0 0 12px}.conversation-group h3{margin:0 9px 4px;overflow:hidden;color:#a6b0ab;font-size:10px;font-weight:600;line-height:1.35;text-overflow:ellipsis;white-space:nowrap}
 .cluster-row .inline-disclosure{position:relative;margin:0 10px 24px 84px;padding:8px 14px 16px 22px;border:0;border-radius:0;background:transparent}.cluster-row .inline-disclosure .disclosure-rail{position:absolute;left:0;top:-10px;bottom:0;width:2px;background:#bbc4d9}.cluster-row .inline-disclosure.actor-manager .disclosure-rail{background:#b9cabd}.cluster-row .inline-disclosure.actor-validator .disclosure-rail{background:#dacba9}.cluster-row .inline-disclosure>header{justify-content:flex-start;gap:8px;padding:2px 0 10px;border-bottom:1px solid #d9dbd5}.cluster-row .inline-disclosure>header b{font-size:11px}.cluster-row .inline-disclosure>header>span:not(.role-chip){color:#7b827d;font:9px ui-monospace,monospace}.cluster-row .inline-disclosure>header button{margin-left:auto;border:0;background:transparent;color:#65706a}.cluster-row .inline-disclosure .process-stream{margin:8px 0 0;border-top:0}.cluster-row .inline-disclosure .stream-viewport{max-height:none;overflow:visible}
 
@@ -1011,7 +1011,7 @@ table.evidence .msg {
 .session-nav-header .workspace-theme-toggle{position:static;z-index:auto;width:30px;height:30px;box-sizing:border-box;padding:0;border-radius:6px;box-shadow:none;flex:none}
 .session-nav-header .workspace-theme-toggle>span:first-child{font-size:16px;line-height:1}
 
-/* ChatGPT Local is a first-class source, not a Hermes manager process. */
+
 .process-card.actor-chatgpt{border-color:#75a899;background:#eef8f4}
 .process-card.actor-chatgpt .process-header b{color:#2f6d60}
 .process-card.actor-chatgpt .role-chip{color:#2f6d60}

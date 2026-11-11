@@ -360,7 +360,7 @@ function Card({
       {attention && !expanded && (
         <div className="attention-summary">
           <b>Needs input</b>
-          <span>{hasQuestion ? "A response is required" : "Waiting for Hermes"}</span>
+          <span>{hasQuestion ? "A response is required" : "Waiting for response"}</span>
         </div>
       )}
       {expanded ? (
@@ -526,7 +526,7 @@ export function SessionTimeline({
           <h1>{displayName || timeline.session.intent}</h1>
         </button>
         <div className="session-context">
-          {timeline.session.sourceTitle ?? timeline.session.originHermesSessionTitle ?? "Hermes"} ·{" "}
+          {timeline.session.sourceTitle ?? "Session"} ·{" "}
           {started.toLocaleDateString(undefined, {
             month: "short",
             day: "numeric",

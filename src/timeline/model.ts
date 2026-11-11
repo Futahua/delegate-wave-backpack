@@ -9,7 +9,7 @@ export interface StreamBounds { complete:boolean; hasEarlier:boolean; cursor?:st
 export interface ProcessSpan { id:string; parentId?:string; actor:'manager'|'worker'|'validator'|'chatgpt'; label:string; state:'live'|'waiting'|'completed'|'failed'|'cancelled'; startedAt:string; finishedAt?:string; stream:StreamItem[]; streamBounds:StreamBounds }
 export interface ProcessBundle extends ProcessSpan { bundle:true; processes:ProcessSpan[] }
 export type TimelineProcess = ProcessSpan | ProcessBundle;
-export interface SessionSummary { id:string; rootJobId?:string; intent:string; mode:string; source?:string; sourceTitle?:string; state:'live'|'waiting'|'settled'; originHermesSessionId?:string; originHermesSessionTitle?:string; startedAt:string; settledAt?:string; updatedAt:string }
+export interface SessionSummary { id:string; rootJobId?:string; intent:string; mode:string; source?:string; sourceTitle?:string; state:'live'|'waiting'|'settled'; startedAt:string; settledAt?:string; updatedAt:string }
 export interface SessionPage { sessions:SessionSummary[]; hasMore:boolean; nextCursor?:string }
 export interface SessionTimeline { session:SessionSummary; spans:ProcessSpan[]; revision:string; streamPageFor?:string }
 const str=(r:Record<string,unknown>,k:string):string|undefined=>typeof r[k]==='string'?r[k] as string:undefined;
@@ -20,7 +20,7 @@ function session(raw: unknown): SessionSummary | undefined {
   if(!id||!intent||!startedAt||!['live','waiting','settled'].includes(state??''))return;
   return { id,intent,mode:str(raw,'mode')??'UNKNOWN',source:str(raw,'source'),sourceTitle:str(raw,'source_title'),state:state as SessionSummary['state'],startedAt,
     updatedAt:str(raw,'updated_at')??startedAt,rootJobId:str(raw,'root_job_id'),
-    originHermesSessionId:str(raw,'origin_hermes_session_id'),originHermesSessionTitle:str(raw,'origin_hermes_session_title'),settledAt:str(raw,'settled_at') };
+    settledAt:str(raw,'settled_at') };
 }
 
 function toolFrom(raw:unknown):StructuredTool|undefined{if(!isRecord(raw)||typeof raw.name!=='string')return;const input=isRecord(raw.input)?raw.input:undefined,metadata=isRecord(raw.metadata)?raw.metadata:undefined;return{name:raw.name,input:input?{filePath:str(input,'filePath'),file_path:str(input,'file_path'),path:str(input,'path'),command:str(input,'command'),pattern:str(input,'pattern'),query:str(input,'query'),description:str(input,'description'),offset:typeof input.offset==='number'?input.offset:undefined,limit:typeof input.limit==='number'?input.limit:undefined}:undefined,output:str(raw,'output'),error:str(raw,'error'),truncated:raw.truncated===true,metadata:metadata?{exitCode:typeof metadata.exit_code==='number'?metadata.exit_code:undefined,changedFiles:Array.isArray(metadata.changed_files)?metadata.changed_files.filter((value):value is string=>typeof value==='string'):undefined,diff:str(metadata,'diff')}:undefined}}

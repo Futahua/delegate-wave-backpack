@@ -8,8 +8,8 @@ import { WaveOrganizer } from '../src/ui/WaveOrganizer';
 
 let host:HTMLDivElement,root:Root;
 let data:{groups:{id:string;name:string}[];waves:{session_id:string;name?:string;group_id?:string|null;archived_at?:string|null;deleted_at?:string}[]};
-const sessions:SessionSummary[]=[{id:'s1',intent:'Finished task',mode:'MANUAL',state:'settled',originHermesSessionId:'h1',originHermesSessionTitle:'Hermes group',startedAt:'2026-08-31T10:00:00Z',updatedAt:'2026-08-31T10:01:00Z'},
- {id:'s2',intent:'Active task',mode:'AUTO',state:'live',originHermesSessionId:'h1',startedAt:'2026-08-31T10:02:00Z',updatedAt:'2026-08-31T10:02:00Z'}];
+const sessions:SessionSummary[]=[{id:'s1',intent:'Finished task',mode:'MANUAL',state:'settled',source:'chatgpt_local',sourceTitle:'Session group',startedAt:'2026-08-31T10:00:00Z',updatedAt:'2026-08-31T10:01:00Z'},
+ {id:'s2',intent:'Active task',mode:'AUTO',state:'live',source:'chatgpt_local',startedAt:'2026-08-31T10:02:00Z',updatedAt:'2026-08-31T10:02:00Z'}];
 const render=async(collapsed=false)=>{await act(async()=>root.render(<WaveOrganizer sessions={sessions} onSelect={()=>{}} collapsed={collapsed} toggle={()=>{}}/>))};
 const click=async(text:string)=>{const button=[...host.querySelectorAll('button')].find(b=>b.textContent===text);expect(button).toBeTruthy();await act(async()=>button!.click())};
 const named=async(label:string)=>{await act(async()=>host.querySelector<HTMLButtonElement>(`[aria-label="${label}"]`)!.click())};

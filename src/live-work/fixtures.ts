@@ -29,10 +29,10 @@ const base: WatchFixture = {
   activity: [
     activity('m1', 'manager', 'manager', 'Manager', 'narration', 'completed', 'The receiver evidence does not fit the first hypothesis.', 'Checking listener teardown instead.'),
     activity('r1', 'explore-b', 'worker', 'Worker · listener', 'read', 'completed', 'Read wake.js', 'src/session/wake.js'),
-    activity('r2', 'explore-b', 'worker', 'Worker · listener', 'read', 'completed', 'Read hermes-gateway.js', 'src/session/hermes-gateway.js'),
+    activity('r2', 'explore-b', 'worker', 'Worker · listener', 'read', 'completed', 'Read session-gateway.js', 'src/session/session-gateway.js'),
     activity('s1', 'explore-b', 'worker', 'Worker · listener', 'search', 'completed', 'Searched child.kill', '3 matches in 2 files'),
     activity('m2', 'implementation', 'worker', 'Worker · implementation', 'narration', 'completed', 'Found the lifetime boundary.', 'The fence releases before process exit is observed.'),
-    activity('e1', 'implementation', 'worker', 'Worker · implementation', 'edit', 'completed', 'Edited hermes-gateway.js', 'Wait for the child exit event after forced termination.'),
+    activity('e1', 'implementation', 'worker', 'Worker · implementation', 'edit', 'completed', 'Edited session-gateway.js', 'Wait for the child exit event after forced termination.'),
     activity('e2', 'implementation', 'worker', 'Worker · implementation', 'edit', 'completed', 'Added teardown regression', 'test/wake.test.js'),
     activity('c1', 'implementation', 'worker', 'Worker · implementation', 'command', 'updated', 'Running focused tests…', '42 / 58'),
   ],
@@ -48,7 +48,7 @@ const base: WatchFixture = {
     { id: 'v2', kind: 'validation', title: 'Successive-wake regression', detail: 'Old listener exited before the next handoff', status: 'passed', source: 'validation_runs:v_105', occurredAt: at(19), authority: 'evidence' },
     { id: 'candidate', kind: 'candidate', title: 'Candidate recorded', detail: 'ae38cf9086e2', status: 'recorded', source: 'attempts:a_8', occurredAt: at(20), authority: 'evidence' },
   ],
-  changedFiles: { count: 3, additions: 81, deletions: 14, files: ['src/session/wake.js', 'src/session/hermes-gateway.js', 'test/wake.test.js'] },
+  changedFiles: { count: 3, additions: 81, deletions: 14, files: ['src/session/wake.js', 'src/session/session-gateway.js', 'test/wake.test.js'] },
 };
 
 const withState = (id: string, patch: Partial<WatchFixture>): WatchFixture => ({ ...base, id, ...patch });

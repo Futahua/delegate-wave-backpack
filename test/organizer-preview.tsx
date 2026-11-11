@@ -19,7 +19,7 @@ window.addEventListener('message',e=>{
  window.postMessage({type:'papers:host:result',requestId,ok:true,delegateWave:{ok:true,result:organization}},window.location.origin);
 });
 const sessions:SessionSummary[]=[
- {id:'sample1',intent:'Make validator cards compact and readable',mode:'MANUAL',state:'settled',originHermesSessionId:'h1',originHermesSessionTitle:'Backpack improvements',startedAt:'2026-08-31T10:00:00Z',updatedAt:'2026-08-31T10:01:00Z'},
- {id:'sample2',intent:'Check the routing tests',mode:'AUTO',state:'live',originHermesSessionId:'h1',originHermesSessionTitle:'Backpack improvements',startedAt:'2026-08-31T10:02:00Z',updatedAt:'2026-08-31T10:02:00Z'}];
+ {id:'sample1',intent:'Make validator cards compact and readable',mode:'MANUAL',state:'settled',source:'chatgpt_local',sourceTitle:'Backpack improvements',startedAt:'2026-08-31T10:00:00Z',updatedAt:'2026-08-31T10:01:00Z'},
+ {id:'sample2',intent:'Check the routing tests',mode:'AUTO',state:'live',source:'chatgpt_local',sourceTitle:'Backpack improvements',startedAt:'2026-08-31T10:02:00Z',updatedAt:'2026-08-31T10:02:00Z'}];
 function Fixture(){const [collapsed,setCollapsed]=useState(false),[selected,setSelected]=useState<string>();return <div className="session-app" style={{display:'grid',gridTemplateColumns:collapsed?'48px 1fr':'300px 1fr'}}><aside className={`session-sidebar${collapsed?' collapsed':''}`}><WaveOrganizer sessions={sessions} selected={selected} onSelect={setSelected} collapsed={collapsed} toggle={()=>setCollapsed(!collapsed)}/></aside><main style={{padding:32}}><h2>Isolated organizer preview</h2><p>Sample data only. No live sessions or operational records.</p></main></div>}
 createRoot(document.getElementById('root')!).render(<Fixture/>);
